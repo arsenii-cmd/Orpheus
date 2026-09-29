@@ -1,6 +1,7 @@
 import hashlib
 import re
 from datetime import datetime
+import time
 
 import numpy as np
 
@@ -157,3 +158,12 @@ def test_a_mode_switch_is_its_own_turn():
     assert b.handled == "stop"
     list(b.ask("Давай о личном.", now=NOW))
     assert b.handled == "mode" and b.calls == []
+
+
+def test_past_talks_come_along_only_when_the_phrase_is_about_the_past():
+    # "ты вообще умный?" brought three chats of other days ("Вы цените оперативность…"), and the model retold them
+    b = make(text("a"), text("b"), embedder=WordEmbedder())
+    b.memory.add_turn("я поссорился с Виктором из-за денег", "Сочувствую.")
+    b.since = time.time() + 2  # that talk was before this conversation
+    assert "говорили" not in "\n".join(b._recall("как там Виктор"))
+    assert "говорили" in "\n".join(b._recall("что я говорил про Виктора"))
