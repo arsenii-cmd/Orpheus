@@ -210,6 +210,12 @@ class Weather:
         # "в Питере": the short names, whatever their ending
         name = next((v for k, v in ALIASES.items() if key == k or (len(k) > 3 and key.startswith(k[:-1]))), None)
         found = self._geocode(name) if name else self._geocode(text)
+        if found and not name and found[0].get("country_code") not in (None, "RU") \
+                and found[0]["name"].lower().replace("ё", "е") != key:  # "Токио" is Tokyo; "Твери" is not "Тверия"
+            # "в Твери" found Tiberias in Israel (+25 for Tver): a Russian town of that stem comes first, if there is one
+            home_town = self._by_stems(text, country="RU")
+            if home_town:
+                found = home_town
         if not found:
             # "в Казани", "в Нижнем Новгороде": the geocoder finds names by their start, so the ending is
             # cut off letter by letter ("Казан", then "Каза"), and the other words must fit too
@@ -232,6 +238,21 @@ class Weather:
         place = Place(r["name"], "в " + said, r["latitude"], r["longitude"], r.get("timezone") or "Europe/Moscow")
         self._places[key] = place
         return place
+
+    def _by_stems(self, text, country=None):
+        """The town whose words start as the said ones, less their endings ("Твери" -> "Твер" -> Тверь)."""
+        words = [w.lower().replace("ё", "е") for w in re.split(r"[\s-]+", text) if w]
+        for cut in (1, 2):
+            stems = [w[:-cut] if len(w) > cut + 2 else w for w in words]
+            for r in self._geocode(stems[0], count=10):
+                if not str(r.get("feature_code", "PPL")).startswith("PPL") or country and r.get("country_code") != country:
+                    continue
+                if country and (r.get("population") or 0) < 5000:
+                    continue  # a village of that stem is no reason to leave the town abroad
+                parts = [p.lower().replace("ё", "е") for p in re.split(r"[\s-]+", r["name"])]
+                if len(parts) >= len(stems) and all(p.startswith(s) for p, s in zip(parts, stems)):
+                    return [r]
+        return None
 
     def _geocode(self, name, count=5):
         data = self.web.get_json(GEOCODE, {"name": name, "count": count, "language": "ru"})

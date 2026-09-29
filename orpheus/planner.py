@@ -302,18 +302,24 @@ class PlannerTools:
         self.focus = self.listed = items
         self.listed_turn = self.turn
         if spoken and first != last and len(items) > SPOKEN_MAX:
-            # "что у меня на этой неделе" read out ~1500 characters: the count, the nearest, and how to ask on
-            ahead = [i for i in items if not i["done"] and i["date"] >= today.isoformat()][:3]
-            days = len({i["date"] for i in items})
-            near = "; ".join("%s — %s" % (spoken_day(date.fromisoformat(i["date"]), today), spoken_item(i)) for i in ahead)
-            return "%d %s за %d %s. Ближайшее: %s. Про любой день спроси отдельно" % (
-                len(items), plural(len(items), "запись", "записи", "записей"), days, plural(days, "день", "дня", "дней"), near)
+            # "что у меня на этой неделе" read out ~1500 characters: a day a phrase, titles only, what is over left out
+            now = self.now()
+            ahead = [i for i in items if not i["done"] and (i["date"] > today.isoformat() or i["date"] == today.isoformat()
+                                                             and (i.get("start_time") or "99") >= now.strftime("%H:%M"))]
+            days = {}
+            for i in ahead:
+                days.setdefault(i["date"], []).append(i["title"])
+            said = ["%s: %s" % (_upper_first(_near_day(date.fromisoformat(d), today)), ", ".join(t[:1].lower() + t[1:] if not t[:2].isupper() else t
+                                                                                           for t in v)) for d, v in list(days.items())[:4]]
+            rest = sum(len(v) for v in list(days.values())[4:])
+            return ". ".join(said) + (". И ещё %d %s дальше" % (rest, plural(rest, "дело", "дела", "дел")) if rest else "")
         if first == last:
             if not items:
                 return "%s: в планах ничего нет" % spoken_day(first, today)
             return "%s: %s" % (spoken_day(first, today), "; ".join(spoken_item(i) for i in items))
         if not items:
-            return "с %s по %s в планах ничего нет" % (spoken_day(first, today), spoken_day(last, today))
+            # not "с понедельник, 5 октября по воскресенье…": no case to get wrong
+            return "%s — %s: в планах ничего нет" % (spoken_day(first, today), spoken_day(last, today))
         days = {}
         for it in items:
             days.setdefault(it["date"], []).append(spoken_item(it))
@@ -405,7 +411,11 @@ class PlannerTools:
         self.focus = [item]
         self.last_write = self.turn
         d = date.fromisoformat(item["date"])
-        return "Добавил на %s: %s." % (spoken_day(d, self.today(), acc=True), spoken_item(item))
+        answer = "Добавил на %s: %s." % (spoken_day(d, self.today(), acc=True), spoken_item(item))
+        if item.get("start_time") and "%sT%s" % (item["date"], item["start_time"]) < now.strftime("%Y-%m-%dT%H:%M"):
+            # "напомни сегодня в пять вечера" said at 23:50: set for a time gone, without a word
+            answer += " Только это время уже прошло: скажи «на завтра», если перенести"
+        return answer
 
     def _named(self, when, heard=True):
         """The day and the time the person named: in the tool's "when", else in the phrase itself
@@ -970,6 +980,11 @@ def time_span(text):
 
 
 SPOKEN_MAX = 12  # more items than this over several days are summed up when said aloud
+
+
+def _near_day(d, today):
+    """"сегодня", "завтра", "в четверг" - short, for a summary."""
+    return {0: "сегодня", 1: "завтра", 2: "послезавтра"}.get((d - today).days) or WEEKDAYS[d.weekday()]
 
 
 def tidy_title(title):

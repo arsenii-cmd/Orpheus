@@ -1279,4 +1279,81 @@ def test_a_long_week_is_summed_up_aloud():
     many = [{"id": "x%d" % k, "kind": "task", "title": "Дело %d" % k, "date": "2026-09-2%d" % (5 + k % 3)} for k in range(14)]
     brain = make(*many)
     reply = say(brain, "что у меня на этой неделе")
-    assert reply.startswith("14 записей за 3 дня. Ближайшее:") and len(reply) < 250
+    assert reply.startswith("Сегодня: дело 0, дело 3") and "Завтра:" in reply and len(reply) < 250
+
+
+def test_delete_all_but_one_and_a_pronoun_to_place():
+    # "удали всё на сегодня кроме русского" deleted the Russian lesson too; "поставь его на 9 утра" made «Его»
+    brain = make(*WEEK)
+    assert "кроме «Хакатон»" in say(brain, "удали всё на завтра кроме хакатона")
+    say(brain, "да")
+    assert [i["title"] for i in brain.skills.planner.planner.rows.values() if i["date"] == "2026-09-26"] == ["Хакатон"]
+    assert "по одному шагу" in say(brain, "отмени всё что я сегодня менял")
+    say(brain, "что у меня в понедельник")
+    assert say(brain, "поставь её на 9 утра").startswith("Перенёс на понедельник")
+    assert say(brain, "физику отметь как сделанную").startswith("Отметил")
+
+
+def test_what_to_remind_is_asked_and_the_answer_added():
+    # the fourth talk: "напомни через 20 минут" - "уточни…" - "позвонить бабушке" went to the model: "Напомню тебе
+    # позвонить бабушке через 20 минут", with nothing set
+    brain = make(*WEEK)
+    assert say(brain, "напомни через 20 минут") == "Что напомнить?"
+    assert say(brain, "позвонить бабушке").startswith("Добавил")
+    assert brain.skills.planner.planner.quick_text == "в 14:23 позвонить бабушке"
+    assert say(brain, "напомни") == "Что напомнить?"
+    assert say(brain, "добавь задачу") == "Что добавить?"
+    assert say(brain, "сделать физику").startswith("Добавил")
+    assert say(brain, "напомни через час") == "Что напомнить?"
+    assert say(brain, "ладно забей") == "Хорошо."
+
+
+def test_a_yes_after_one_model_turn_still_confirms():
+    # "удали занятие по русскому" - "Удалить …?" - "какое" (the model) - "да": nothing happened
+    brain = make(*WEEK, replies=[text("Занятие по русскому завтра в 10:00.")])
+    assert say(brain, "удали занятие по русскому завтра").startswith("Удалить")
+    say(brain, "какое")
+    assert say(brain, "да").startswith("Удалил")
+
+
+def test_a_plan_moved_by_its_name_and_a_time_without_the_verb():
+    # the fourth talk: "а ЕГЭ на 20", "ЕГЭ не в 22 а в 20" -> "ЕГЭ перенесён на 20:00" from the model, nothing moved
+    brain = make(*WEEK, replies=[text("Ясно.")] * 3)
+    assert "с 20:00 до 21:40 ЕГЭ" in say(brain, "а ЕГЭ на 20")
+    assert "с 12:00 до 15:00 Хакатон" in say(brain, "хакатон лучше в 12")
+    assert "с 21:00 до 22:40 ЕГЭ" in say(brain, "ЕГЭ не в 20 а в 21")
+    assert say(brain, "а физика на завтра?") == "Ясно."
+    assert say(brain, "а я на работу") == "Ясно."
+
+
+def test_time_until_a_plan_and_the_end_of_the_week():
+    # the fourth talk: "через сколько часов хакатон" -> the model said 15 hours for 10; "до конца недели" -> "Это сегодня"
+    brain = make(*WEEK)
+    assert say(brain, "через сколько часов хакатон") == "До «Хакатон» осталось 19 часов 57 минут."
+    assert say(brain, "сколько до конца хакатона") == "До конца «Хакатон» осталось 22 часа 57 минут."
+    assert say(brain, "сколько времени до ЕГЭ") == "До «ЕГЭ» осталось 1 день 7 часов."
+    assert say(brain, "сколько до 18:00") == "До 18:00 осталось 3 часа 57 минут."
+    assert say(brain, "сколько осталось до конца недели") == "До конца недели 2 дня: воскресенье, 27 сентября."
+
+
+def test_a_repeat_without_the_verb_and_the_whole_of_a_repeat_deleted():
+    # the fourth talk: "по будням в 8 утра английский" went to the model ("добавлен в расписание", nothing added);
+    # "удали всю серию английский" deleted the next one only
+    brain = make(*WEEK)
+    assert say(brain, "по будням в 8 утра английский").startswith("Добавил по будням")
+    series = [{"id": "e%d" % k, "kind": "event", "title": "Английский", "date": "2026-09-%d" % (28 + k), "start_time": "08:00",
+               "series": "s9"} for k in range(3)]
+    brain = make(*WEEK, *series)
+    assert "Это один из повторов" in say(brain, "удали английский")
+    say(brain, "нет")
+    assert say(brain, "удали всю серию английский").startswith("Удалить все повторы «Английский»")
+
+
+def test_what_the_fourth_talk_showed_about_facts():
+    # "я играю на гитаре" -> the model: "Добавил в память" (nothing saved); now the program keeps each of these
+    brain = make(replies=[text("Ясно.")] * 3)
+    for said in ["я играю на гитаре", "я учусь в 11 классе", "у меня собака по кличке Рекс", "мне нравится Тарантино",
+                 "мой лучший друг Даня", "я хочу поступить в МФТИ"]:
+        assert say(brain, said) == "Запомнил.", said
+    assert say(brain, "мой друг уехал") == "Ясно."
+    assert len(brain.memory.facts()) == 6

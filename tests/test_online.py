@@ -663,3 +663,13 @@ def test_news_about_a_topic_without_asking_words():
         brain = make(replies=[text("Вот.")])
         say(brain, phrase)
         assert brain.calls and brain.calls[-1][0] == "web_search", phrase
+
+
+def test_the_weather_city_goes_on_and_there_is_it():
+    # the fourth talk: "а там дождь будет", "нужен ли зонт", "а ветер" after Kazan were answered for home, or by the model
+    brain = make(replies=[text("Ясно.")] * 3)
+    say(brain, "погода в Казани")
+    assert say(brain, "а там дождь будет").endswith("в Казани дождя не ожидается.") or "в Казани" in brain.last_reply
+    assert "в Казани" in say(brain, "нужен ли зонт")
+    assert "в Казани" in say(brain, "а ветер сильный")
+    assert say(brain, "в Казани сегодня сколько градусов") == "Сейчас в Казани +13."

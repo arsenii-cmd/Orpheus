@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from orpheus.brain import NO_ANSWER, NUDGE, SYSTEM, TOOLS, Brain
+from orpheus.brain import NO_ANSWER, NOT_DONE, NUDGE, SYSTEM, TOOLS, Brain
 from orpheus.config import Config
 from orpheus.memory import Memory
 
@@ -152,7 +152,7 @@ def test_notes_matching_the_phrase_come_along_with_it():
 
 def test_an_action_claimed_with_no_tool_called_is_not_said():
     brain = make(text("Вернул созвон ", "с Васей на 27 сентября."), text("Вернул созвон."))
-    assert "".join(brain.ask("ну что там с созвоном", now=NOW)) == "Этого я не сделал: не понял, что именно. Скажи, пожалуйста, иначе."
+    assert "".join(brain.ask("ну что там с созвоном", now=NOW)) == NOT_DONE
     brain = make(tool("remember", fact="Любит чай"))
     assert "".join(brain.ask("я люблю чай", now=NOW)) == "Запомнил."
     brain = make(text("Добавлю, если скажете время."))  # not a claim of something done
@@ -184,7 +184,7 @@ def test_a_tool_named_then_its_argument_is_a_call_too():
     assert text_call("add_note купить батарейки") is None  # a space alone is too loose
     assert text_call("forget\n3") is None  # not a text argument
     brain = make(text("Я запомнил, что вы живёте в Казани."), text("Я запомнил."))
-    assert "".join(brain.ask("у меня кот по имени барсик", now=NOW)).startswith("Этого я не сделал")
+    assert "".join(brain.ask("есть у меня кот барсик", now=NOW)).startswith("Этого я не сделал")
 
 
 def test_gemma_gets_the_prompt_without_tool_lines_and_a_stamp_written_back_is_not_said():
@@ -197,7 +197,7 @@ def test_gemma_gets_the_prompt_without_tool_lines_and_a_stamp_written_back_is_no
 
 def test_a_claim_with_no_call_is_asked_once_more():
     brain = make(text("Я зафиксировал, что вы живёте в Казани."), tool("remember", fact="Живёт в Казани"))
-    assert "".join(brain.ask("у меня кот по имени барсик", now=NOW)) == "Запомнил."
+    assert "".join(brain.ask("есть у меня кот барсик", now=NOW)) == "Запомнил."
     assert brain.memory.facts() == [(1, "Живёт в Казани")]
 
 
@@ -236,3 +236,15 @@ def test_a_day_named_brings_its_plans_along():
                   planner=tools({"id": "f", "kind": "event", "title": "Физика", "date": "2026-09-25", "start_time": "12:00"}))
     list(brain.ask("бла бла карандаш пятница", now=NOW))
     assert "Физика" in brain.llm.requests[0][-1]["content"]
+
+
+def test_a_claim_in_the_middle_of_an_answer_is_not_said():
+    # the fourth talk: "я играю на гитаре" -> "Понятно. Добавил в память, что ты играешь на гитаре." with nothing saved;
+    # "Напомню тебе позвонить бабушке через 20 минут."; "ЕГЭ перенесён на 20:00."
+    from orpheus.brain import NOT_DONE_AFTER
+    brain = make(text("Понятно. Добавил в память, что ты играешь на гитаре."))
+    assert "".join(brain.ask("кстати гитара у меня теперь есть", now=NOW)) == "Понятно. " + NOT_DONE_AFTER
+    brain = make(text("Могу добавить это в планы, если скажешь время."))
+    assert "".join(brain.ask("мне надо в спортзал", now=NOW)) == "Могу добавить это в планы, если скажешь время."
+    brain = make(text("Эйнштейн создал теорию относительности."))
+    assert "".join(brain.ask("кто такой Эйнштейн", now=NOW)) == "Эйнштейн создал теорию относительности."
