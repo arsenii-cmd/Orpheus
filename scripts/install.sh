@@ -30,5 +30,5 @@ echo "Готово. Проверка:   .venv/bin/python -m orpheus --stats chat
 echo "Голос:              .venv/bin/python -m orpheus --stats voice"
 echo "Автозапуск, голос ноута:      systemctl --user enable --now orpheus"
 echo "или сервер для телефона:      systemctl --user enable --now plannerd orpheus-server"
-echo "                              (plannerd — из репозитория Planner; для доступа снаружи — scripts/firewall.sh)"
+echo "                              (plannerd — из https://github.com/arsenii-cmd/Planner; для доступа снаружи — scripts/firewall.sh)"
 echo "Настройки:          systemctl --user edit orpheus-server   (или orpheus)"

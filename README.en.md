@@ -60,6 +60,23 @@ The script installs system packages, creates `.venv`, downloads the speech model
 installs and tunes Ollama, downloads the language model (~2.5 GB) and installs the systemd
 services. Log in again afterwards (the `audio` group was added).
 
+### Planner
+
+Orpheus keeps plans and notes in [Planner](https://github.com/arsenii-cmd/Planner), a separate
+project with a phone app and desktop sync. Orpheus talks to the `plannerd` daemon on the same
+machine at `http://127.0.0.1:47211/api`:
+
+```sh
+git clone https://github.com/arsenii-cmd/Planner.git
+install -Dm755 Planner/server/plannerd.py ~/.local/bin/plannerd
+install -Dm644 Planner/server/quickparse.py ~/.local/bin/quickparse.py
+systemctl --user enable --now plannerd orpheus-server   # scripts/install.sh installs plannerd.service
+```
+
+The unit runs `plannerd serve --local-only`: the copy listens on `127.0.0.1` only and syncs with
+your Planner through its cloud mode (see "Headless copy" in Planner's README for how to pair it).
+Everything else works without Planner, and `ORPHEUS_PLANNER=-` turns it off entirely.
+
 ## Running
 
 ```sh
@@ -216,6 +233,7 @@ units with `scripts/install.sh`.
 | `ORPHEUS_DB` | `~/.local/share/orpheus/orpheus.db` | Memory and notes database |
 | `ORPHEUS_MODELS` | `~/.local/share/orpheus/models` | Speech models |
 | `ORPHEUS_OLLAMA` | `http://127.0.0.1:11434` | Ollama address |
+| `ORPHEUS_PLANNER` | `http://127.0.0.1:47211/api` | Planner's local API; `-` — no planner |
 | `ORPHEUS_PROXY` | — | Proxy for weather and search; empty — direct, `-` — no internet |
 | `ORPHEUS_CITY` | `Москва` | Weather city when none is named |
 | `ORPHEUS_SEARXNG` | — | Your own SearXNG (`http://127.0.0.1:8888`): searched first, DuckDuckGo as a fallback |

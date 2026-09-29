@@ -56,6 +56,23 @@ scripts/install.sh                     # Ollama сразу на встроенн
 ставит и настраивает Ollama, скачивает языковую модель (~2,5 ГБ) и кладёт
 systemd-сервисы. После него нужно перелогиниться (добавлена группа `audio`).
 
+### Планировщик (Planner)
+
+Планы и заметки Орфей хранит в [Planner](https://github.com/arsenii-cmd/Planner) — отдельном
+проекте с приложением для телефона и синхронизацией с компьютером. Орфей говорит с демоном
+`plannerd` на этой же машине через `http://127.0.0.1:47211/api`:
+
+```sh
+git clone https://github.com/arsenii-cmd/Planner.git
+install -Dm755 Planner/server/plannerd.py ~/.local/bin/plannerd
+install -Dm644 Planner/server/quickparse.py ~/.local/bin/quickparse.py
+systemctl --user enable --now plannerd orpheus-server   # юнит plannerd.service ставит scripts/install.sh
+```
+
+Юнит запускает `plannerd serve --local-only`: копия слушает только `127.0.0.1` и синхронизируется
+с вашим Planner через его облачный режим (как её подключить — в README Planner, раздел
+«Headless copy»). Без Planner всё остальное работает, а `ORPHEUS_PLANNER=-` выключает его совсем.
+
 ## Запуск
 
 ```sh
@@ -215,6 +232,7 @@ Home Assistant: `(а|б)` — одно из, `[а]` — можно пропус�
 | `ORPHEUS_DB` | `~/.local/share/orpheus/orpheus.db` | База памяти и заметок |
 | `ORPHEUS_MODELS` | `~/.local/share/orpheus/models` | Модели речи |
 | `ORPHEUS_OLLAMA` | `http://127.0.0.1:11434` | Адрес Ollama |
+| `ORPHEUS_PLANNER` | `http://127.0.0.1:47211/api` | Локальный API Planner; `-` — без планировщика |
 | `ORPHEUS_PROXY` | — | Прокси для погоды и поиска; пусто — напрямую, `-` — без интернета |
 | `ORPHEUS_CITY` | `Москва` | Город для погоды, когда город не назван |
 | `ORPHEUS_SEARXNG` | — | Свой SearXNG (`http://127.0.0.1:8888`): поиск сначала в нём, запасной — DuckDuckGo |

@@ -1,4 +1,4 @@
-# The Planner's local copy for Orpheus (127.0.0.1 only); plannerd itself comes from the Planner repository
+# The Planner's local copy for Orpheus (127.0.0.1 only); plannerd itself comes from https://github.com/arsenii-cmd/Planner
 # (~/.local/bin/plannerd). In the machine's time zone, the same one Orpheus counts its days in.
 [Unit]
 Description=Planner local copy for Orpheus (127.0.0.1 only)
