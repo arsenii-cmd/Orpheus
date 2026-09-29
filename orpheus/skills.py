@@ -819,7 +819,7 @@ class Skills:
             target = self._birthday(today)
             if target is None:
                 return None
-            name = "вашего дня рождения" if re.search(r"мо(его|й)|у меня", when, re.I) else when
+            name = "твоего дня рождения" if re.search(r"мо(его|й)|у меня", when, re.I) else when
         if target is None:
             span = period(when, today)
             if span is None:
@@ -1065,10 +1065,10 @@ class Skills:
         asked again after "забудь …", it once made up "вы любите чай" from what was said before."""
         facts = self.brain.active.facts()
         if not facts:
-            return "Пока я ничего о вас не знаю. Расскажите — запомню."
+            return "Пока я ничего о тебе не знаю. Расскажи — запомню."
         # (told "перескажи на «вы»", Gemma 4 began "Вы знаете, что у вас аллергия…")
-        return Context("всё, что ты помнишь о собеседнике, — только это: %s. Скажи от себя — «Я помню, что вы…» — "
-                       "пересказав это на «вы», коротко, ничего не добавляя" % "; ".join(t.rstrip(".") for _, t in facts))
+        return Context("всё, что ты помнишь о собеседнике, — только это: %s. Скажи от себя — «Я помню, что ты…» — "
+                       "пересказав это на «ты», коротко, ничего не добавляя" % "; ".join(t.rstrip(".") for _, t in facts))
 
     def do_moved(self, m, now):
         place = re.sub(r"[,.]?\s*(?:запомни|запиши|учти)\b.*$", "", m.slots.get("place", ""), flags=re.I).strip(" ,.!")
@@ -1088,7 +1088,7 @@ class Skills:
         else:
             memory.remember(fact)
         self.brain.refresh_facts()
-        return "Запомнил: вы %s в %s." % ("переехали" if moved else "живёте", place)
+        return "Запомнил: ты %s в %s." % ("переехал" if moved else "живёшь", place)
 
     def do_my_birthday(self, m, now):
         """"Мой день рождения 15 марта": kept as a fact with the date, what "сколько до моего дня
@@ -1097,7 +1097,7 @@ class Skills:
         if not when:  # "когда у меня день рождения?"
             said = next((t for _, t in self.brain.memory.facts() if re.search(r"(?i)день рождения", t)), None)
             if not said:
-                return "Вы мне ещё не говорили, когда у вас день рождения."
+                return "Ты мне ещё не говорил, когда у тебя день рождения."
             return "Ваш %s." % re.sub(r"(?i)^(?:мой|у меня)\s+", "", said).rstrip(".")
         span = period(when, now.date())
         if span is None or span[0] != span[1]:
@@ -1111,13 +1111,13 @@ class Skills:
         else:
             memory.remember("Мой день рождения %s" % said)
         self.brain.refresh_facts()
-        return "Запомнил: ваш день рождения %s." % said
+        return "Запомнил: твой день рождения %s." % said
 
     def do_forget_all(self, m, now):
         memory = self.brain.active
         facts = memory.facts()
         if not facts:
-            return "Я и так ничего о вас не помню."
+            return "Я и так ничего о тебе не помню."
 
         def forget():
             for fid, _ in facts:
@@ -1125,9 +1125,9 @@ class Skills:
             self.brain.refresh_facts()
             self._can_undo(lambda: ([memory.remember(t) for _, t in facts], self.brain.refresh_facts(),
                                     "Вернул в память всё, что забыл.")[2])
-            return "Забыл всё, что помнил о вас."
+            return "Забыл всё, что помнил о тебе."
 
-        return self._ask("Забыть всё, что я о вас помню — %d %s?" % (len(facts), plural(len(facts), "факт", "факта", "фактов")),
+        return self._ask("Забыть всё, что я о тебе помню — %d %s?" % (len(facts), plural(len(facts), "факт", "факта", "фактов")),
                          forget, no="Хорошо, всё помню как было.")
 
     def do_my_name(self, m, now):
@@ -1143,11 +1143,11 @@ class Skills:
         else:
             memory.remember("Меня зовут %s" % name)
         self.brain.refresh_facts()
-        return "Запомнил: вас зовут %s." % name if old else "Приятно познакомиться, %s." % name
+        return "Запомнил: тебя зовут %s." % name if old else "Приятно познакомиться, %s." % name
 
     def do_ask_name(self, m, now):
         name = self.owner_name()
-        return "Вас зовут %s." % name if name else None  # else the model may know it from the conversation
+        return "Тебя зовут %s." % name if name else None  # else the model may know it from the conversation
 
     def _best_fact(self, memory, query):
         facts = memory.facts()
@@ -1746,7 +1746,7 @@ class Skills:
             series = self._series_named(what)
             if series:
                 return series
-            return "Скажите, за какой день удалить всё."
+            return "Скажи, за какой день удалить всё."
         items = self.planner.planner.items(*span)
         if not items:
             return "Там и так ничего нет."
@@ -1814,7 +1814,7 @@ class Skills:
         if memory.meta("summary_day") != day:
             memory.meta("summary_day", day)
             return "%s! %s" % (hello, self._day_summary(now))
-        return "%s. %s" % (hello, self.rng.choice(["Чем могу помочь?", "Слушаю вас.", "Чем займёмся?"]))
+        return "%s. %s" % (hello, self.rng.choice(["Чем займёмся?", "Слушаю.", "Все системы в порядке. Что на повестке?"]))
 
     def _day_summary(self, now):
         """"Сегодня понедельник, 28 сентября. По плану: …. <погода>": what the day is, what is still ahead in it
@@ -1835,7 +1835,7 @@ class Skills:
         return " ".join(said)
 
     def do_thanks(self, m, now):
-        return self.rng.choice(["Пожалуйста.", "Всегда рад помочь.", "Обращайтесь."])
+        return self.rng.choice(["Всегда пожалуйста.", "Рад стараться.", "Для этого я здесь."])
 
     def do_bye(self, m, now):
         if re.search(r"ночи", self.heard, re.I) or now.hour >= 22 or now.hour < 4:
@@ -1848,7 +1848,7 @@ class Skills:
         return ""  # the server tells the phone to stop waiting for more (server.py, "listen": false)
 
     def do_pause(self, m, now):
-        return "Хорошо, не слушаю. Чтобы я снова слушал, нажмите «Слушать снова» или «Говорить»."
+        return "Хорошо, не слушаю. Чтобы я снова слушал, нажми «Слушать снова» или «Говорить»."
 
     def do_ack(self, m, now):
         if self.brain.last_reply.rstrip().endswith("?"):
@@ -1856,17 +1856,17 @@ class Skills:
         return ""
 
     def do_how_are_you(self, m, now):
-        return self.rng.choice(["Всё в порядке, спасибо. Чем могу помочь?", "Работаю исправно. Чем займёмся?",
-                                "Отлично, спасибо, что спросили. Что нужно?"])
+        return self.rng.choice(["Все системы в норме, спасибо. Чем займёмся?", "Работаю исправно, как и положено. Что нужно?",
+                                "Отлично, спасибо, что спросил. Что на повестке?"])
 
     def do_who(self, m, now):
-        return "Я Орфей, ваш личный голосовой ассистент."
+        return "Я Орфей, твой личный голосовой ассистент."
 
     def do_capabilities(self, m, now):
         if self.weather is None:
-            return ("Веду ваш планировщик и заметки, помню то, что вы просите запомнить, называю время и дату, считаю. "
+            return ("Веду твой планировщик и заметки, помню то, что ты просишь запомнить, называю время и дату, считаю. "
                     "А обо всём остальном можно просто поговорить.")
-        return ("Веду ваш планировщик и заметки, помню то, что вы просите запомнить, подскажу время, дату и погоду, "
+        return ("Веду твой планировщик и заметки, помню то, что ты просишь запомнить, подскажу время, дату и погоду, "
                 "посчитаю и поищу в интернете. А обо всём остальном можно просто поговорить.")
 
     def do_reset(self, m, now):
@@ -2176,7 +2176,7 @@ class Skills:
         return "Управлять устройствами я пока не умею."
 
     def do_timer(self, m, now):
-        return "Таймеров у меня пока нет, но могу добавить напоминание в планы: скажите «напомни через десять минут …»."
+        return "Таймеров у меня пока нет, но могу добавить напоминание в планы: скажи «напомни через десять минут …»."
 
     def do_alarm(self, m, now):
         return "Будильников у меня пока нет, но могу добавить напоминание в планы."

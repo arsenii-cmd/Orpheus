@@ -152,7 +152,7 @@ def test_notes_matching_the_phrase_come_along_with_it():
 
 def test_an_action_claimed_with_no_tool_called_is_not_said():
     brain = make(text("Вернул созвон ", "с Васей на 27 сентября."), text("Вернул созвон."))
-    assert "".join(brain.ask("ну что там с созвоном", now=NOW)) == "Этого я не сделал: не понял, что именно. Скажите, пожалуйста, иначе."
+    assert "".join(brain.ask("ну что там с созвоном", now=NOW)) == "Этого я не сделал: не понял, что именно. Скажи, пожалуйста, иначе."
     brain = make(tool("remember", fact="Любит чай"))
     assert "".join(brain.ask("я люблю чай", now=NOW)) == "Запомнил."
     brain = make(text("Добавлю, если скажете время."))  # not a claim of something done

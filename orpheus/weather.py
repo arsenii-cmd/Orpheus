@@ -453,6 +453,6 @@ class Weather:
             umbrella = max(hourly["precipitation_probability"][i] or 0 for i in rows) >= 50
         when = day_name(named or d, today) + (" " + hours[2] if rows else "")
         return "%s %s, ощущается как %s: %s%s." % (when.capitalize(), place.where, temp(feel), advice,
-                                                  ", и возьмите зонт" if umbrella else "")
+                                                  ", и возьми зонт" if umbrella else "")
 
 

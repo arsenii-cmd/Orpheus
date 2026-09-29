@@ -282,8 +282,8 @@ def test_small_talk_and_repeat():
     assert say(brain, "Повтори.") == "Жил-был кот."
     assert say(brain, "Привет!").startswith("Добрый день! Сегодня пятница, 25 сентября.")  # the day's first: its summary
     assert say(brain, "Привет!") in ("Добрый день. Чем могу помочь?", "Добрый день. Слушаю вас.", "Добрый день. Чем займёмся?")
-    assert say(brain, "Спасибо!") in ("Пожалуйста.", "Всегда рад помочь.", "Обращайтесь.")
-    assert say(brain, "Кто ты?") == "Я Орфей, ваш личный голосовой ассистент."
+    assert say(brain, "Спасибо!") in ("Всегда пожалуйста.", "Рад стараться.", "Для этого я здесь.")
+    assert say(brain, "Кто ты?") == "Я Орфей, твой личный голосовой ассистент."
     assert say(brain, "Ладно.") == ""  # nothing to say to that
     assert say(brain, "Какая погода завтра?") == "Погоды у меня нет: выход в интернет выключен."
     assert say(brain, "Подбрось монетку.") in ("Орёл.", "Решка.")
@@ -448,7 +448,7 @@ def test_everything_on_a_day_goes_after_a_yes_and_comes_back():
     assert say(brain, "Да.") == "Удалил 4 записи."
     assert say(brain, "Верни.").startswith("Вернул: в 10:00 Занятие по русскому языку; с 10:00 до 13:00 Хакатон;")
     assert len(brain.planner.planner.items(FRI, FRI.replace(day=30))) == 6
-    assert say(brain, "Удали всё.") == "Скажите, за какой день удалить всё."
+    assert say(brain, "Удали всё.") == "Скажи, за какой день удалить всё."
 
 
 def test_two_requests_in_one_phrase_are_both_done():
@@ -493,8 +493,8 @@ def test_how_many_and_a_plain_no():
 def test_a_name_is_remembered_and_told():
     brain = make()
     assert say(brain, "Меня зовут Иван.") == "Приятно познакомиться, Иван."
-    assert say(brain, "Как меня зовут?") == "Вас зовут Иван."
-    assert say(brain, "Называй меня Сеня.") == "Запомнил: вас зовут Сеня."
+    assert say(brain, "Как меня зовут?") == "Тебя зовут Иван."
+    assert say(brain, "Называй меня Сеня.") == "Запомнил: тебя зовут Сеня."
     assert brain.memory.facts() == [(1, "Меня зовут Сеня")]
     assert "Меня зовут Сеня" in brain.facts  # the model reads it at once
     assert brain.skills.handle("меня зовут на работу", NOW) is None
@@ -542,9 +542,9 @@ def test_what_the_program_forgets_the_model_forgets_too():
     assert "кофе" not in brain.llm.requests[0][1]["content"]  # the facts message is the memory's again
     # "что ты обо мне знаешь?": the facts themselves go along, for the model to add nothing to
     say(brain, "Что ты обо мне знаешь?")
-    assert "только это: Я живу в Казани. Скажи от себя — «Я помню, что вы…»" in brain.llm.requests[1][-1]["content"]
+    assert "только это: Я живу в Казани. Скажи от себя — «Я помню, что ты…»" in brain.llm.requests[1][-1]["content"]
     brain = make()
-    assert say(brain, "Что ты обо мне знаешь?") == "Пока я ничего о вас не знаю. Расскажите — запомню."
+    assert say(brain, "Что ты обо мне знаешь?") == "Пока я ничего о тебе не знаю. Расскажи — запомню."
 
 
 def test_leap_years_are_counted_not_guessed():
@@ -614,7 +614,7 @@ def test_the_birthday_told_is_counted_to():
     brain = make()
     assert brain.skills.handle("Сколько дней до моего дня рождения?", NOW) is None  # not told yet: the model's
     brain.memory.remember("Мой день рождения 15 марта")
-    assert say(brain, "Сколько дней до моего дня рождения?") == "До вашего дня рождения 171 день, это будет понедельник."
+    assert say(brain, "Сколько дней до моего дня рождения?") == "До твоего дня рождения 171 день, это будет понедельник."
 
 
 def test_notes_are_added_to_counted_and_deleted_all_at_once_after_a_yes():
@@ -636,13 +636,13 @@ def test_notes_are_added_to_counted_and_deleted_all_at_once_after_a_yes():
 
 def test_a_birthday_is_kept_and_everything_forgotten_after_a_yes():
     brain = make()
-    assert say(brain, "Мой день рождения 15 марта.") == "Запомнил: ваш день рождения 15 марта."
+    assert say(brain, "Мой день рождения 15 марта.") == "Запомнил: твой день рождения 15 марта."
     say(brain, "Запомни, что у меня аллергия на орехи.")
-    assert say(brain, "Сколько дней до моего дня рождения?") == "До вашего дня рождения 171 день, это будет понедельник."
-    assert say(brain, "Забудь всё обо мне.") == "Забыть всё, что я о вас помню — 2 факта?"
+    assert say(brain, "Сколько дней до моего дня рождения?") == "До твоего дня рождения 171 день, это будет понедельник."
+    assert say(brain, "Забудь всё обо мне.") == "Забыть всё, что я о тебе помню — 2 факта?"
     assert say(brain, "Нет.") == "Хорошо, всё помню как было."
     say(brain, "Забудь всё обо мне.")
-    assert say(brain, "Да.") == "Забыл всё, что помнил о вас."
+    assert say(brain, "Да.") == "Забыл всё, что помнил о тебе."
     assert brain.memory.facts() == []
     assert say(brain, "Верни.") == "Вернул в память всё, что забыл."
     assert len(brain.memory.facts()) == 2
@@ -730,9 +730,9 @@ def test_titles_lose_what_is_said_around_them():
 def test_a_move_replaces_where_one_lives():
     brain = make()
     say(brain, "Запомни, что я живу в Москве.")
-    assert say(brain, "Я переехал в Санкт-Петербург.") == "Запомнил: вы переехали в Санкт-Петербург."
+    assert say(brain, "Я переехал в Санкт-Петербург.") == "Запомнил: ты переехал в Санкт-Петербург."
     assert brain.memory.facts() == [(1, "Я переехал в Санкт-Петербург")]
-    assert say(brain, "Кстати, я теперь живу в Казани, запомни это.") == "Запомнил: вы живёте в Казани."
+    assert say(brain, "Кстати, я теперь живу в Казани, запомни это.") == "Запомнил: ты живёшь в Казани."
     assert brain.memory.facts() == [(1, "Я живу в Казани")]
 
 
@@ -1162,7 +1162,7 @@ def test_words_match_at_their_start_and_claims_in_any_person():
 
 def test_where_one_lives_is_remembered():
     brain = make()
-    assert say(brain, "Я живу в Казани.") == "Запомнил: вы живёте в Казани."
+    assert say(brain, "Я живу в Казани.") == "Запомнил: ты живёшь в Казани."
     assert brain.skills.handle("Я живу в своё удовольствие.", NOW) is None or brain.skills.handled != "moved"
 
 
