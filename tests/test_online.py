@@ -211,8 +211,7 @@ def test_weather_is_spoken_right():
 def test_who_is_answered_from_wikipedia_without_the_model():
     brain = make()
     assert say(brain, "Кто такой Никола Тесла?") == \
-        "Никола Тесла — американский инженер сербского происхождения, изобретатель в области электротехники. " \
-        "Известен вкладом в создание устройств на переменном токе."
+        "Никола Тесла — американский инженер сербского происхождения, изобретатель в области электротехники."  # one, aloud
     assert brain.llm.requests == [] and brain.handled == "wiki"
 
 
@@ -297,7 +296,7 @@ def test_a_dead_proxy_is_offline_not_a_way_around(monkeypatch):
 def test_rain_over_several_days_and_wiki_about_the_thing_itself():
     brain = make()
     assert say(brain, "Будет ли дождь на выходных?") == ("Да, завтра ожидается дождь: вероятность 80%, днём и вечером. "
-                                                         "Возможен, послезавтра вероятность осадков 30%.")
+                                                         "Возможен дождь: послезавтра вероятность осадков 30%.")
     assert say(brain, "Будет ли дождь в понедельник?") == "Нет, в понедельник дождя не ожидается."
     WIKI["query"]["pages"]["0"] = {"index": 0, "title": "Потомки Теслы", "extract": "У Теслы не было детей, но были потомки."}
     try:

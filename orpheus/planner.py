@@ -249,7 +249,7 @@ class PlannerTools:
         items = self.planner.items(first, last)
         stems = [w[:5] for w in re.findall(r"[а-я]{3,}", re.sub(r"\w*(?:" + DAY_WORDS + r")\w*", " ", text.lower().replace("ё", "е")))
                  if w not in LISTING_WORDS and w not in STOP and w not in ASK_WORDS]
-        scored = [(sum(st in (i["title"] + " " + i["body"]).lower().replace("ё", "е") for st in stems), i) for i in items]
+        scored = [(sum(st in _abbr((i["title"] + " " + i["body"]).lower().replace("ё", "е")) for st in stems), i) for i in items]
         best = max((sc for sc, _ in scored), default=0)
         if best:
             return "подходящее: " + "; ".join("%s — %s" % (spoken_day(date.fromisoformat(i["date"]), today), spoken_item(i))
@@ -257,8 +257,8 @@ class PlannerTools:
         return "" if only else self.listing(first, last)
 
     def _question_stems(self, text):
-        return [w[:5] for w in re.findall(r"[а-я]{3,}", re.sub(r"\w*(?:" + DAY_WORDS + r")\w*", " ",
-                                                              to_digits(text).lower().replace("ё", "е")))
+        return [w[:5] for w in re.findall(r"[а-я]{3,}|(?<!\w)кр(?!\w)", _abbr(re.sub(r"\w*(?:" + DAY_WORDS + r")\w*", " ",
+                                                              to_digits(text).lower().replace("ё", "е"))))
                 if w not in LISTING_WORDS and w not in STOP and w not in ASK_WORDS]
 
     def matching(self, text, first, last):
@@ -269,7 +269,7 @@ class PlannerTools:
         stems = self._question_stems(text)
         if not stems:
             return None
-        scored = [(sum(st in (i["title"] + " " + i["body"]).lower().replace("ё", "е") for st in stems), i)
+        scored = [(sum(st in _abbr((i["title"] + " " + i["body"]).lower().replace("ё", "е")) for st in stems), i)
                   for i in self.planner.items(first, last)]
         found = [i for sc, i in scored if sc == len(stems)]
         _, time = self._named(text, heard=False)
@@ -283,7 +283,7 @@ class PlannerTools:
         if not stems:
             return None
         return [i for i in self.planner.items(first, last)
-                if any(st in (i["title"] + " " + i["body"]).lower().replace("ё", "е") for st in stems)]
+                if any(st in _abbr((i["title"] + " " + i["body"]).lower().replace("ё", "е")) for st in stems)]
 
     def plans(self, when, spoken=False):
         if re.search(r"заметк", when or "", re.I):
@@ -449,7 +449,7 @@ class PlannerTools:
         for it in self.planner.items(first, last):
             title = _abbr((it["title"] + " " + it["body"]).lower().replace("ё", "е"))
             score = sum(1 for st in stems if re.search(r"(?<!\w)" + re.escape(st), title))
-            if score or not stems:
+            if score or not stems:  # (the title is _abbr'd above: "Контрольная по химии" is found by "кр" too)
                 scored.append((score, it))
         if time:
             timed = [(sc, it) for sc, it in scored if it.get("start_time") == time]

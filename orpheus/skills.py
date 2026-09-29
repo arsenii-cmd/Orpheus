@@ -57,7 +57,7 @@ WEATHER_WORDS = re.compile(r"погод|дожд|снег|зонт|градус|
 # the weather's questions after which "а там дождь будет?", "а ветер?" keep the city
 WEATHER_ALL = WEATHER | {"weather_wind", "weather_humidity", "weather_sun"}
 # the scenarios a short "а завтра?", "а в Сочи?" goes on from: the same question, another day or city
-FOLLOWED = WEATHER | {"weather_wind", "weather_humidity", "time_in", "plan_ask", "plan_next", "date_of", "days_until", "year_month", "rate", "web_search", "fresh"}
+FOLLOWED = WEATHER | {"weather_wind", "weather_humidity", "time_in", "time_until", "plan_ask", "plan_next", "date_of", "days_until", "year_month", "rate", "web_search", "fresh"}
 FOLLOW_START = re.compile(r"^\W*(?:(?:а|ага|угу|ну|и|так|тогда|ладно|хорошо|окей|понятно|ясно)\W+)*(?:(?:как|что)\s+(?:насч[её]т|по\s+поводу|там\s+с|с)"
                           r"\s+|что\s+(?:там\s+)?|как\s+(?:там\s+)?)?", re.I)
 # words that may stand around the new day or city: "а что там на выходных?", "а в Сочи будет?"
@@ -281,6 +281,29 @@ PART_OF_DAY = re.compile(r"(?<!\w)(?:с\s+)?(утром|утра|вечером|
 PART_TIME = {"утр": "9:00", "веч": "19:00", "днё": "13:00", "дне": "13:00"}
 
 
+# the owner's own words, said back to them: "Мой лучший друг Костя" -> "твой лучший друг Костя"
+YOU_WORDS = {"я": "ты", "мне": "тебе", "меня": "тебя", "мной": "тобой", "мой": "твой", "моя": "твоя", "мое": "твоё", "моё": "твоё",
+             "мои": "твои", "моего": "твоего", "мою": "твою", "моей": "твоей", "моему": "твоему", "моих": "твоих", "моим": "твоим",
+             "люблю": "любишь", "хочу": "хочешь", "живу": "живёшь", "учусь": "учишься", "хожу": "ходишь", "сдаю": "сдаёшь",
+             "ем": "ешь", "пью": "пьёшь", "могу": "можешь", "родился": "родился", "родилась": "родилась", "ненавижу": "ненавидишь",
+             "обожаю": "обожаешь", "болею": "болеешь", "пою": "поёшь", "учу": "учишь", "рисую": "рисуешь", "танцую": "танцуешь"}
+
+
+def to_you(fact):
+    """A saved fact (the owner's words) said to the owner: pronouns and the first-person verbs turned."""
+    def turn(m_):
+        w = m_.group(0)
+        low = w.lower()
+        out = YOU_WORDS.get(low)
+        if out is None and re.fullmatch(r"\w{3,}(?:аю|яю|ею)", low):
+            out = low + "шь" if False else low[:-1] + "ешь"  # "играю" -> "играешь"
+        if out is None and re.fullmatch(r"\w{3,}(?:аюсь|яюсь)", low):
+            out = low[:-3] + "ешься"  # "занимаюсь" -> "занимаешься"
+        return out if out is not None else w
+    said = re.sub(r"\w+", turn, fact)
+    return said[:1].lower() + said[1:] if not re.match(r"[А-ЯЁ]{2}", said) else said
+
+
 def search_query(text):
     return ASKING.sub("", text).strip(" ?.!,") or text.strip(" ?.!,")
 
@@ -441,6 +464,8 @@ DUTY = re.compile(r"(?:купить|сделать|позвонить|напис
 def TOLD_PLAN(text):
     """A day and a time and what, said as a statement: "в понедельник в 16:40 занятие по физике"; "у меня в
     субботу турнир" with no time too (a task of that day)."""
+    if re.search(r"свобод|(?<!\w)занят[аы]?(?!\w)|перешел|перешла|перешёл|или\s+(?:дня|ночи|утра|вечера)|(?<!\w)класс", text, re.I):
+        return False  # "я свободен завтра в 15", "я перешёл в 12", "в три дня или ночи": no plan told (each became one)
     repeats = repeat_days(text) is not None or REPEAT_WEEK.search(text) is not None  # "по будням в 8 утра английский"
     return ((_has_day(text) or repeats and _has_time(text)) and (_has_time(text) or re.match(r"^\W*(?:(?:ну|а|кстати|слушай|короче)\W+)*у\s+(?:меня|нас)\s", text, re.I)
                                 and not re.search(r"рожден|днюх|выходн|праздник|каникул|отпуск|свобод|занят|дел(?:а|о)?\b|план", text, re.I))
@@ -529,6 +554,7 @@ class Skills:
         self.wanted = None  # (turn, when) - "Что напомнить?" waiting for what, the day and time said already
         self.wanted_day = None  # (turn, "удали всё %s …") - "За какой день удалить всё?" waiting for the day
         self.pending_kept = -1
+        self.last_fact = None  # (turn, id) of the fact just told: "на самом деле математика" changes it
         self.last_weather = None  # (turn, scenario, phrase) of the last weather question: its city goes on for three turns  # the turn after which a question still waiting for "да" was kept (see handle)
         self.rewritten = None  # the phrase as the scenarios read it, when that differs ("напомни, как …" -> "как …")
         self.undo_stack = []  # (action) - what "верни" does, the last one first
@@ -600,7 +626,7 @@ class Skills:
                 and self._specific(text) is None and "?" not in text:
             # "напомни через 20 минут" - "Что напомнить?" - "позвонить бабушке": the model got it and said
             # "напомню через 20 минут", with nothing set
-            return self._dispatch("напомни %s %s" % (wanted[1], text.strip(" .!")), now)
+            return self._dispatch("напомни %s %s" % (wanted[1], re.sub(r"^(?:до|к)\s+", "", text.strip(" .!"), flags=re.I)), now)
         reaction = REACTION.match(text)
         if reaction:
             text = self.heard = text[reaction.end():]
@@ -770,6 +796,8 @@ class Skills:
         if intent == "date_of" and re.fullmatch(r"(?:в|на)?\s*следующ\w*(?:\s+\w+)?", low) and self.last_day:
             d = self.last_day + timedelta(days=7)  # "какое число в пятницу?" - "а в следующую?"
             return "какое число будет %d.%02d.%d" % (d.day, d.month, d.year)
+        if intent in ("time_until", "days_until") and re.match(r"(?:а\s+)?до\s+\S", low):
+            return "сколько времени %s" % re.sub(r"^а\s+", "", frag, flags=re.I)  # "сколько до русского" - "а до физики"
         if intent == "time_in":  # "сколько времени в Токио" - "а в Лондоне": the other city's time
             city = _city(to_digits(frag))
             return "сколько времени %s" % city.group(0) if city and len(frag.split()) <= 3 else None
@@ -864,8 +892,14 @@ class Skills:
     def do_time_until(self, m, now):
         """"Сколько времени осталось до полуночи?", "…до 18:00": the hours and minutes left (the model: 10 s)."""
         when = m.slots.get("when", "") or ("конца " + m.slots["end"] if m.slots.get("end") else "")
-        if re.search(r"полуноч|полноч|конца\s+(?:дня|суток)", when, re.I):
+        holiday = next(((mo, d, said) for pattern, mo, d, said in HOLIDAYS if re.search(pattern, to_digits(when), re.I)), None)
+        if re.search(r"полуноч|полноч|конца\s+(?:дня|суток)|^\s*завтра\s*$", when, re.I):
             target, name = datetime.combine(now.date() + timedelta(days=1), datetime.min.time()), "полуночи"
+        elif holiday:  # "сколько часов до нового года" (the model: "около 194 дней", "22479 часов")
+            target = datetime(now.year, holiday[0], holiday[1])
+            if target <= now:
+                target = target.replace(year=now.year + 1)
+            name = holiday[2]
         else:
             name = _clock("в " + when, now)
             if not name and self.planner is not None and not _has_day(when):
@@ -976,6 +1010,8 @@ class Skills:
             if re.search(pattern, to_digits(when), re.I):
                 target, name = date(today.year, month, day), said
                 break
+        if target is None and re.search(r"конц\w*\s+(?:этого\s+)?год", when, re.I):
+            target, name = date(today.year, 12, 31), "конца года"  # "сколько до конца года месяцев" got "Это сегодня"
         if target is None and re.search(r"конц\w*\s+недел", when, re.I):
             # "сколько осталось до конца недели" got "Это сегодня"
             left = 6 - today.weekday()
@@ -1007,6 +1043,8 @@ class Skills:
                 days = (target - today).days
                 when_ = spoken_day(target, today)
                 at = " в %s" % item["start_time"] if item.get("start_time") else ""
+                if days == 0 and item.get("start_time"):
+                    return self.do_time_until(dataclasses.replace(m, slots={"when": when}), now)  # hours, not "сегодня в 12"
                 if days == 0:
                     return "«%s» сегодня%s." % (item["title"], at)
                 if days == 1:
@@ -1266,12 +1304,15 @@ class Skills:
                 memory.forget(i)
             self.brain.refresh_facts()
             return "Понял, убрал из памяти."
-        fact = _cap(re.sub(r"^\W*(?:(?:ну|слушай|кстати|короче|вот|а|теперь|поправка)\W+)*", "", to_digits(heard) if m.slots.get("age")
+        fact = _cap(re.sub(r"^\W*(?:(?:ну|слушай|кстати|короче|вот|а|теперь|поправка|нет)\W+)*", "", to_digits(heard) if m.slots.get("age")
                            else heard).rstrip(" .!"))
         fact = re.sub(r"(?<!\w)теперь\s+", "", fact, flags=re.I)
         if m.slots.get("old"):  # "лучший друг у меня не Егор а Костя"
             fact = "Мой лучший друг %s" % m.slots["name"].strip(" .!")
         old = None
+        if re.match(r"(?i)лучш\w+\s+(?:друг|подруга)", fact):  # "нет, лучший друг Влад"
+            fact = ("Моя " if re.match(r"(?i)лучшая", fact) else "Мой ") + fact[:1].lower() + fact[1:]
+            fact = re.sub(r"(?i)\s+у\s+меня\s+", " ", fact)
         friend = re.match(r"(?i)(мой|моя)\s+(?:лучш\w+\s+)?(друг|подруга|парень|девушка)(?!\w)", fact)
         verb = re.match(r"(?i)я\s+(\w+)", fact)
         if friend:
@@ -1291,7 +1332,8 @@ class Skills:
             if who is None or not re.fullmatch(r"\d{1,3}", to_digits(m.slots["age"]).strip()):
                 return None
             n = int(to_digits(m.slots["age"]))
-            memory.update_fact(who[0], "%s, %s %d %s" % (who[1].rstrip(" ."), m.template[1:3], n, plural(n, "год", "года", "лет")))
+            said = "ему" if re.match(r"\W*ему", self.heard, re.I) else "ей"  # the word said, not the template's first
+            memory.update_fact(who[0], "%s, %s %d %s" % (who[1].rstrip(" ."), said, n, plural(n, "год", "года", "лет")))
             self.brain.refresh_facts()
             return "Запомнил."
         if m.template.startswith("[а] (его|ее|её) (зовут"):
@@ -1319,11 +1361,50 @@ class Skills:
             old = next((i for i, t in facts if re.match(r"мне\s+\d+\s+(?:лет|год)", t, re.I)), None)
         if old is not None:
             memory.update_fact(old, fact)
+            self.last_fact = (self.turn, old)
         else:
             fact_id = memory.remember(fact)
+            self.last_fact = (self.turn, fact_id)
             self._can_undo(lambda: (memory.forget(fact_id), self.brain.refresh_facts(), "Хорошо, это я забыл.")[2])
         self.brain.refresh_facts()
         return "Запомнил."
+
+    def do_fact_fix(self, m, now):
+        """"Нет, не синий, а зелёный", "на самом деле математика", "брату исполнилось 21": the saved fact changed
+        (the model said "понял, обновляю" and the old one stayed)."""
+        memory = self.brain.active
+        facts = memory.facts()
+        if not facts:
+            return None
+        new = m.slots.get("new", "").strip(" .!")
+        if m.slots.get("age"):
+            n = re.search(r"\d{1,3}", to_digits(m.slots["age"]))
+            key = {"брат": "брат", "сест": "сестр", "мам": "мам", "пап": "пап", "дру": "друг", "под": "подруг"}.get(
+                normalize_low(self.heard)[:4].strip(), "")
+            who = next(((i, t) for i, t in reversed(facts) if re.search(r"\d+\s+(?:лет|год)", t)
+                        and (not key or key in t.lower())), None)
+            if who is None or n is None:
+                return None
+            fact = re.sub(r"\d+\s+(?:лет|года|год)", "%s %s" % (n.group(0), plural(int(n.group(0)), "год", "года", "лет")), who[1])
+        elif m.slots.get("old"):
+            old = _stems(m.slots["old"])
+            who = next(((i, t) for i, t in reversed(facts) if old and re.search(r"(?<!\w)%s" % re.escape(old[0][:4]), t, re.I)), None)
+            if who is None or not re.search(r"\w", new):
+                return None
+            fact = re.sub(r"(?<!\w)%s\w*" % re.escape(old[0][:4]), new, who[1], count=1, flags=re.I)
+        else:  # "на самом деле математика": the fact just told
+            if self.last_fact is None or self.turn - self.last_fact[0] > 2 or len(new.split()) > 3:
+                return None
+            who = next(((i, t) for i, t in facts if i == self.last_fact[1]), None)
+            if who is None:
+                return None
+            head = re.match(r"(?i)(.*?(?:любим\w*\s+\w+|друг|подруга|зовут|кличке|имени)\s+(?:это\s+|—\s*)?)", who[1])
+            if not head:
+                return None
+            fact = head.group(1) + new
+        memory.update_fact(who[0], fact)
+        self.brain.refresh_facts()
+        return "Запомнил: %s." % to_you(fact).rstrip(".")
 
     def do_forget(self, m, now):
         query = m.slots.get("fact", "")
@@ -1342,7 +1423,7 @@ class Skills:
         self.brain.refresh_facts()
         self._can_undo(lambda: (memory.remember(text), self.brain.refresh_facts(),
                                 "Вернул в память: %s." % text.rstrip("."))[2])
-        return "Забыл: %s." % (text[:1].lower() + text[1:]).rstrip(".")
+        return "Забыл: %s." % to_you(text).rstrip(".")  # "у тебя есть кот", not "у меня" as if Orpheus's
 
     def do_about_me(self, m, now):
         """"Что ты обо мне знаешь?" - the facts themselves, for the model to retell and add nothing to:
@@ -1350,6 +1431,9 @@ class Skills:
         facts = self.brain.active.facts()
         if not facts:
             return "Пока я ничего о тебе не знаю. Расскажи — запомню."
+        if not self.brain.personal:
+            # all of it, said by the program: the model dropped half of six facts, took 20-30 s, and mixed in old ones
+            return "Я помню: %s." % "; ".join(to_you(t).rstrip(" .") for _, t in facts[:15])
         # (told "перескажи на «вы»", Gemma 4 began "Вы знаете, что у вас аллергия…")
         return Context("всё, что ты помнишь о собеседнике, — только это: %s. Скажи от себя — «Я помню, что ты…» — "
                        "пересказав это на «ты», коротко, ничего не добавляя" % "; ".join(t.rstrip(".") for _, t in facts))
@@ -1476,7 +1560,8 @@ class Skills:
             return self._busiest(*span, today, freest=FREEST.search(t) is not None)
         if ABOUT_DATE.search(t) or re.search(r"заметк|памят", t, re.I):
             return None
-        if m.template.startswith(("[а] у меня", "[а] {q}", "напомни")) and "?" not in t:
+        if m.template.startswith(("[а] у меня", "[а] {q}", "напомни")) and "?" not in t \
+                and not re.search(r"(?:когда|во\s+сколько)(?:\s+(?:у\s+меня|будет))?\s*$", normalize_low(t)):
             return None  # "у меня завтра день рождения." tells, "напомни, что завтра врач" asks to add
         today = now.date()
         year = re.search(r"(?<!\d)(20\d\d)(?!\d)", t)
@@ -1578,6 +1663,8 @@ class Skills:
         if self.planner is None:
             return None
         when = m.slots.get("when", "") or self.heard  # "а у меня вечером что-нибудь есть?": the part of the day is in the phrase
+        if not _has_day(when) and _has_day(self.heard):
+            when = self.heard  # "а в 15 я свободен завтра": the day after the time (it looked at today)
         today = now.date()
         span = period(when, today) if _has_day(when) else (today, today)
         if span is None or span[0] != span[1]:
@@ -1671,6 +1758,14 @@ class Skills:
         if m.template.startswith("запиши") and not (_has_day(what) or _has_time(what)):
             return None
         what = re.sub(r"^(?:что|чтобы)\s+", "", what, flags=re.I)
+        before = re.fullmatch(r"\s*за\s+((?:\S+\s+)?(?:час\w*|минут\w*|полчаса))\s*", what, re.I)
+        if before and len(self.planner.focus) != 1:
+            self.wanted = (self.turn, "за %s до" % before.group(1))
+            return "За %s до чего напомнить?" % before.group(1)
+        if before and len(self.planner.focus) == 1:
+            # "и напомни за час" after a plan was talked of: its own reminder (it made a task «За час»)
+            return self.do_plan_remind(dataclasses.replace(m, slots={"before": before.group(1),
+                                                                     "what": self.planner.focus[0]["title"]}), now)
         bare = re.sub(r"(?<!\w)(?:напоминание|задачу|задача|дело|событие|мне)(?!\w)", " ", what, flags=re.I).strip(" .,!")
         if not bare or when_only(bare):
             # "напомни", "добавь задачу", "напомни через 20 минут", "поставь напоминание на завтра в 8": what is asked for
@@ -2046,6 +2141,8 @@ class Skills:
             if problem:
                 # "сделай перевод с английского", "давай разговор на потом отложим": not about the plans
                 loose = m.slots.get("span") or no_verb or m.template.startswith(("[давай] {what}", "(перекинь|", "[а|и] {what}"))
+                if problem.startswith("уточни, какое именно"):
+                    return _say(problem)  # several of that name: asked, not a second one added ("русский перенесли на завтра")
                 return None if loose else _say(problem)
         planner = self.planner
         if re.match(r"\W*(?:отложи|отодвинь|сдвинь|передвинь)", self.heard, re.I) and re.fullmatch(
@@ -2153,6 +2250,8 @@ class Skills:
             # "хакатон отменяется": told as news; the plan of that name, if there is one, is asked about
             item, _ = self.planner._find(what, strict=True)
             return self.confirm_delete(item) if item is not None else None
+        if re.search(r"напоминани", what, re.I):
+            return self._reminders_off(now)  # "отмени все напоминания": the reminders, not the plans ("за какой день удалить всё?")
         if ALL_OF.match(normalize_low(what)) or m.template.startswith("(очисти|"):
             return self._delete_all(what, now)
         if NOT_PLANS.search(what):
@@ -2167,6 +2266,22 @@ class Skills:
             return problem
         return self.confirm_delete(item)
 
+    def _reminders_off(self, now):
+        today = now.date()
+        items = [i for i in self.planner.planner.items(today, today + timedelta(days=60)) if i.get("remind") is not None and not i["done"]]
+        if not items:
+            return "Напоминаний и так нет."
+        planner = self.planner
+
+        def off():
+            for i in items:
+                planner.planner.save({k: v for k, v in dict(i, remind=None).items() if k != "updated_at"})
+            self._can_undo(lambda: ([planner.planner.save({k: v for k, v in i.items() if k != "updated_at"}) for i in items],
+                                    "Вернул напоминания.")[1])
+            return "Снял напоминания у %d %s; сами дела остались." % (len(items), plural(len(items), "дела", "дел", "дел"))
+        return self._ask("Снять напоминания у %d %s: %s?" % (len(items), plural(len(items), "дела", "дел", "дел"),
+                                                            ", ".join("«%s»" % i["title"] for i in items[:5])), off)
+
     def confirm_delete(self, item):
         """"Удалить …?" - and the next phrase's yes or no is taken here, not by the model (it once took
         "нет, не удаляй" for a yes)."""
@@ -2178,7 +2293,7 @@ class Skills:
             return answer
 
         # one of a repeat: said so, and how the whole of it goes ("удали зарядку" took the next one, silently)
-        also = " Это один из повторов; чтобы убрать все, скажи «удали все %s»." % item["title"].lower() if item.get("series") else ""
+        also = " Это один из повторов; чтобы убрать все, скажи «удали все повторы %s»." % item["title"].lower() if item.get("series") else ""
         return self._ask("Удалить %s?%s" % (planner.describe(item), also), delete, item=item)
 
     def _other_day(self, asked, text, now):
@@ -2477,9 +2592,16 @@ class Skills:
     def do_weather_degrees(self, m, now):
         if m.template.startswith(("[а] (в|во) {rest}", "[а] {rest} сколько")) and len(m.slots.get("rest", "").split()) > 3:
             return None  # "стоит ли в субботу ехать за город, будет тепло?": no city before "тепло"
-        return self._weather_ask(m, now, lambda place, first, last, said_day:
-                                 self.weather.day_text(place, first) if said_day and first != now.date()
-                                 else self.weather.degrees(place))
+        part = self._part_of_day(now)
+
+        def answer(place, first, last, said_day):
+            if part:  # "сколько градусов ночью", "ночью будет холодно": that part of the day, not now
+                word, lo, hi, shift = part
+                text = self.weather.hours_text(place, first + timedelta(days=shift), lo, hi, word, named=first)
+                if text:
+                    return text
+            return self.weather.day_text(place, first) if said_day and first != now.date() else self.weather.degrees(place)
+        return self._weather_ask(m, now, answer)
 
     def do_weather_wind(self, m, now):
         return self._weather_ask(m, now, lambda place, first, last, said_day:

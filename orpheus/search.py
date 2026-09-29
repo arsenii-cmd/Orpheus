@@ -58,6 +58,9 @@ def clean_summary(text, sentences=2):
     text = re.sub(r"(?<!\w)(\w+)\s+или\s+\1(?!\w)", r"\1", text, flags=re.I)
     text = re.sub(r"\s+([,.;:])", r"\1", " ".join(text.split()))
     parts = re.split(r"(?<=[.!?])\s+(?=[А-ЯЁA-Z])", text)
+    # aloud: one sentence, a second only after a short first ("Илон Маск" was four, with his views)
+    if sentences > 1 and parts and len(parts[0]) >= 90:
+        sentences = 1
     return " ".join(parts[:sentences]).strip()
 
 

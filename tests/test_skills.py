@@ -238,7 +238,7 @@ def test_remember_forget_and_bring_back():
     assert say(brain, "Запомни, что я люблю кофе без сахара.") == "Запомнил."
     assert say(brain, "Запомни: мою сестру зовут Аня.") == "Запомнил."
     assert brain.memory.facts() == [(1, "Я люблю кофе без сахара"), (2, "Мою сестру зовут Аня")]
-    assert say(brain, "Забудь, что я люблю кофе.") == "Забыл: я люблю кофе без сахара."
+    assert say(brain, "Забудь, что я люблю кофе.") == "Забыл: ты любишь кофе без сахара."
     assert brain.memory.facts() == [(2, "Мою сестру зовут Аня")]
     assert say(brain, "Верни как было.") == "Вернул в память: Я люблю кофе без сахара."
     assert say(brain, "Забудь про самолёты.") == "Такого я не помню."
@@ -540,9 +540,8 @@ def test_what_the_program_forgets_the_model_forgets_too():
     say(brain, "Забудь, что я люблю кофе.")
     say(brain, "Расскажи мне что-нибудь интересное.")
     assert "кофе" not in brain.llm.requests[0][1]["content"]  # the facts message is the memory's again
-    # "что ты обо мне знаешь?": the facts themselves go along, for the model to add nothing to
-    say(brain, "Что ты обо мне знаешь?")
-    assert "только это: Я живу в Казани. Скажи от себя — «Я помню, что ты…»" in brain.llm.requests[1][-1]["content"]
+    # "что ты обо мне знаешь?": the program says the facts themselves (the model dropped half, and took 20-30 s)
+    assert say(brain, "Что ты обо мне знаешь?") == "Я помню: ты живёшь в Казани."
     brain = make()
     assert say(brain, "Что ты обо мне знаешь?") == "Пока я ничего о тебе не знаю. Расскажи — запомню."
 
@@ -1437,3 +1436,20 @@ def test_what_the_seventh_talk_showed():
     say(brain, "у меня сестра Маша")
     say(brain, "ей 12")
     assert [t for _, t in brain.memory.facts()] == ["Меня зовут Арсен", "У меня сестра Маша, ей 12 лет"]
+
+
+def test_what_the_eighth_talk_showed():
+    brain = make(*WEEK, {"id": "k", "kind": "task", "title": "Кр по алгебре", "date": "2026-09-28"}, replies=[text("Ясно.")] * 3)
+    for said in ["мой любимый цвет синий", "нет не синий а зелёный", "мой любимый предмет физика", "на самом деле математика",
+                 "у меня брат Олег", "ему 20", "брату исполнилось 21", "мой лучший друг Дима", "нет лучший друг Влад"]:
+        say(brain, said)
+    assert say(brain, "что ты обо мне знаешь") == ("Я помню: твой любимый цвет зелёный; твой любимый предмет математика; "
+                                                  "у тебя брат Олег, ему 21 год; твой лучший друг Влад.")
+    assert say(brain, "кр по алгебре когда") == "Понедельник, 28 сентября — задача «Кр по алгебре»."
+    assert say(brain, "сколько до физики") == "До «Физика» осталось 1 час 57 минут."
+    assert say(brain, "сколько часов до нового года") == "До Нового года осталось 97 дней 9 часов."
+    assert say(brain, "а в 15 я свободен завтра").startswith("Да, завтра в 15:00")
+    assert say(brain, "я перешёл в 12") == "Ясно."
+    assert say(brain, "и напомни за час") == "За час до чего напомнить?"
+    assert say(brain, "до хакатона").startswith("Напомню за 60 минут до «Хакатон»")
+    assert say(brain, "хакатон закончился").startswith("Отметил")

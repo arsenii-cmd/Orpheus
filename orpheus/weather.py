@@ -385,7 +385,7 @@ class Weather:
             return "Да, %s%s ожидается %s: вероятность %d%%%s." % (when, where, kind, chance,
                                                                   ", " + part_of_day(hours) if hours else "")
         if chance >= 30:
-            return "Возможен, %s%s вероятность осадков %d%%." % (when, where, chance)
+            return "Возможен %s: %s%s вероятность осадков %d%%." % ("снег" if snow else "дождь", when, where, chance)
         return "Нет, %s%s %s не ожидается." % (when, where, "снега" if snow else "дождя")
 
     def thunder(self, place, first, last):
