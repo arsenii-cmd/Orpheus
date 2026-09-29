@@ -256,3 +256,9 @@ def test_the_programs_not_done_never_stays_in_the_models_history():
     brain = make(text("Я добавил встречу."), text("Я добавил встречу."), text("Хорошо."))
     assert "".join(brain.ask("добавь что-нибудь", now=NOW)) == NOT_DONE
     assert not any(NOT_DONE in str(m.get("content")) for m in brain.messages())
+
+
+def test_what_is_in_the_plans_is_no_claim():
+    # the seventh talk: "какие у меня задачи" -> "Этого я не сделал…": "запланирована" was taken for a claim
+    brain = make(text("У тебя запланирована задача «Купить хлеб»."))
+    assert "".join(brain.ask("какие у меня задачи", now=NOW)) == "У тебя запланирована задача «Купить хлеб»."

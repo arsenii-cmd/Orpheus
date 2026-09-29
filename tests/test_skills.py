@@ -1405,3 +1405,35 @@ def test_plan_news_is_acted_on_or_asked_about():
     say(brain, "его зовут Мурзик")
     assert [t for _, t in brain.memory.facts()] == ["У меня есть кот по имени Мурзик"]
     assert say(brain, "мой любимый цвет какой") == "Ясно."
+
+
+def test_a_plan_named_makes_the_models_claims_checked():
+    # the seventh talk: "контрольная теперь во вторник" -> "Контрольная переносится на вторник" (nothing moved)
+    brain = make(*WEEK, {"id": "k", "kind": "task", "title": "Контрольная по алгебре", "date": "2026-09-28"},
+                 replies=[text("Контрольная переносится на вторник.")])
+    assert say(brain, "контрольная теперь во вторник").startswith("Перенёс на вторник")
+    assert say(brain, "а контрольная как там вообще").startswith("Этого я не сделал")
+
+
+def test_what_the_seventh_talk_showed():
+    brain = make(*WEEK, {"id": "k", "kind": "task", "title": "Кр по алгебре", "date": "2026-09-28"},
+                 {"id": "m", "kind": "event", "title": "Встреча с Димой", "date": "2026-09-26", "start_time": "15:00"},
+                 replies=[text("Ясно.")] * 3)
+    assert say(brain, "перенеси кр на вторник").startswith("Перенёс на вторник")  # "кр" was no word
+    assert say(brain, "что у меня завтра утром").startswith("Завтра утром: в 10:00")
+    assert say(brain, "какие у меня задачи").startswith("Задачи:")
+    assert "с 21:00 до 22:40" in say(brain, "ЕГЭ не в 22 а в 9")  # "в 9" of a 22:00 exam is 21:00, not 09:00
+    assert say(brain, "у меня завтра нет русского").startswith("Удалить завтра")
+    say(brain, "нет")
+    assert say(brain, "напомни завтра за час до хакатона").startswith("Напомню за 60 минут до «Хакатон»")
+    say(brain, "перенеси встречу с Димой на 16")
+    assert say(brain, "нет не с Димой а с Аней") == "Переименовал: теперь это «Встреча с Аней»."
+    assert say(brain, "удали всё кроме хакатона") == "Скажи, за какой день удалить всё."
+    assert say(brain, "да") == "За какой день?"
+    assert say(brain, "завтра").startswith("Удалить всё завтра, кроме «Хакатон»")
+    say(brain, "нет")
+    say(brain, "меня зовут Арсений")
+    assert say(brain, "меня зовут не Арсений а Арсен") == "Запомнил: тебя зовут Арсен."
+    say(brain, "у меня сестра Маша")
+    say(brain, "ей 12")
+    assert [t for _, t in brain.memory.facts()] == ["Меня зовут Арсен", "У меня сестра Маша, ей 12 лет"]

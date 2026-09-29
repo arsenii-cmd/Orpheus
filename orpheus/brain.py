@@ -167,6 +167,9 @@ def said_done(sentence):
     low = sentence.replace("ё", "е").replace("Ё", "Е")
     # "перенеси", "добавь": asked, not done (an example in the program's own answer was taken for a claim)
     low = re.sub(r"(?<!\w)(?:перенеси|добавь|запиши|запомни|удали|отметь|поставь|верни|убери)(?!\w)|«[^»]*»", " ", low, flags=re.I)
+    # "у тебя запланирована задача", "в заметках записан пароль", "добавлено в понедельник": what is there, not what was
+    # just done (every "какие у меня задачи" got "Этого я не сделал")
+    low = re.sub(r"(?<!\w)(?:запланирован|добавлен|записан|отмечен|сохранен)\w*", " ", low, flags=re.I)
     return claims_done(low) or (FUTURE_CLAIM.search(low) is not None and OFFER_WORDS.search(low) is None)
 # asked to do something the program did not take: the model's whole answer is read before it is said, for a
 # "я добавил тренировку" anywhere in it with nothing called ("В четверг пусто, поэтому я добавил…")
@@ -175,7 +178,7 @@ ACTION_REQUEST = re.compile(r"(?<!\w)(?:добав|запиш|запомн|уд�
 # "У вас запланировано занятие по физике в 16:40" with nothing called and nothing like it in the plans
 # any person: "Вы перенесли занятие на завтра" with nothing called (to "он сказал, что перенесёт встречу")
 CLAIM_ANY = re.compile(r"(?<!\w)(?:перенесу|переношу|удаляю|добавляю|восстанавлива\w*|восстановил\w*|вернул\w*|"
-                       r"заменил\w*|убрал\w*|установил\w*|создал\w*|"
+                       r"заменил\w*|убрал\w*|установил\w*|создал\w*|переносится|отменяется|переименован\w*|завершен\w*|"
                        r"исправляю|исправил\w*|обновляю|обновил\w*|перенесен\w*|изменен\w*|"
                        r"запланировал|добавил|записал|запомнил|удалил|перен[её]с|отметил|поставил|вн[её]с|сохранил|"
                        r"зафиксировал|обновил|изменил|переименовал|отменил|забыл)(?:[аи]|ли|ла|ло)?(?!\w)|"
@@ -523,7 +526,7 @@ class Brain:
         hold_all = ACTION_REQUEST.search(text) is not None or (
             self.planner is not None and bool(self.planner.focus) and PLAN_BIT.search(text) is not None)
         # (not after every plan listing: "какой там ветер завтра" got the tail "записать это я не смог")
-        risky = hold_all or PLANS_TALK.search(text) is not None or SELF_TALK.search(text) is not None
+        risky = hold_all or PLANS_TALK.search(text) is not None or SELF_TALK.search(text) is not None or self._names_a_plan(text, now)
         answer = ""
         self._say_now = None
         nudges = []  # asked once more after an empty answer: out of the history afterwards
@@ -693,6 +696,16 @@ class Brain:
             self._unsay(begin)
             self._compact(begin)
             self._trim()
+
+    def _names_a_plan(self, text, now):
+        """"Контрольная теперь во вторник": a plan named in it (the model said "переносится" and moved nothing)."""
+        if self.planner is None or self.personal:
+            return False
+        today = (now or datetime.now()).date()
+        try:
+            return bool(self.planner.related(text, today - timedelta(days=1), today + timedelta(days=30)))
+        except (Unavailable, ValueError):
+            return False
 
     def _unsay(self, begin):
         """"Этого я не сделал…", "записать это я не смог…" said by the program in the model's place never stay in its

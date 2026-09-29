@@ -440,13 +440,14 @@ class PlannerTools:
         day, time = self._named(when, heard)
         first, last = (day, day) if day else (today - timedelta(days=14), today + timedelta(days=60))
         # the words of the title: not "завтрашний" of "перенеси завтрашний русский" (the day is found above)
-        stems = [w[:5] for w in re.findall(r"\w{3,}", query.lower().replace("ё", "е"))
+        # "кр" and "контрольная" are one ("перенеси кр на пятницу" found nothing: two letters were no word)
+        stems = [w[:5] for w in re.findall(r"\w{3,}|(?<!\w)кр(?!\w)", _abbr(query.lower().replace("ё", "е")))
                  if w not in STOP and not re.search(DAY_WORDS, w)]
         if not stems and not day and not time:
             return None, "уточни, что именно"  # "отметь к купленным": nothing to look for
         scored = []
         for it in self.planner.items(first, last):
-            title = (it["title"] + " " + it["body"]).lower().replace("ё", "е")
+            title = _abbr((it["title"] + " " + it["body"]).lower().replace("ё", "е"))
             score = sum(1 for st in stems if re.search(r"(?<!\w)" + re.escape(st), title))
             if score or not stems:
                 scored.append((score, it))
@@ -556,6 +557,7 @@ class PlannerTools:
         False when one day of it was named ("перенеси завтрашнюю зарядку на 8")."""
         today = self.today()
         to = to_digits(to)  # "на четырнадцать", as the recogniser may write it
+        said_to = to
         part = re.fullmatch(r"\s*(?:на\s+)?(утро|утром|обед|вечер|вечером|ночь|ночью)\s*", to, re.I)
         if part:  # "поменяй встречу на вечер": an hour of that part of the day
             to = "в " + PART_HOURS[part.group(1).lower()[:3]]
@@ -583,6 +585,12 @@ class PlannerTools:
         to = clean_quick(to, now if on <= now.date() else datetime.combine(on, datetime.min.time()), keep_weekdays=True)
         span = period(to, today) if re.search(r"[а-я]{3}|\d[./]\d", to, re.I) else None
         _, time = self._named(to, heard=False)
+        if time and item.get("start_time") and not re.search(r"утр|вечер|дня|ноч|\d:\d\d|полдень|полночь", said_to, re.I):
+            # "русский не в шесть а в семь" of the 18:00 lesson: 19:00, the one nearer to it (it was 07:00)
+            h, mm = map(int, time.split(":"))
+            old = int(item["start_time"][:2])
+            if h < 12 and abs(h + 12 - old) < abs(h - old):
+                time = "%02d:%02d" % (h + 12, mm)
         new_day = span[0] if span and span[0] == span[1] else date.fromisoformat(item["date"])
         moved = dict(item, date=new_day.isoformat())
         if time and item["kind"] == "event":
@@ -836,6 +844,11 @@ SAME_WORDS = [(r"wi-?\s?fi|вай-?\s?фай", "вайфай"), (r"whats\s?app|�
               (r"zoom", "зум"), (r"skype", "скайп"), (r"pin|пин-код", "пин")]
 
 
+def _abbr(text):
+    """Spoken short forms as one: "контрольная", "контрольную" -> "кр"."""
+    return re.sub(r"(?<!\w)контрольн\w*", "кр", text)
+
+
 def _canon(text):
     text = text.lower().replace("ё", "е")
     for pattern, word in SAME_WORDS:
@@ -1020,7 +1033,7 @@ def tidy_title(title):
         doctor = re.fullmatch(r"(%s)(?:а|у|ом|е)?" % "|".join(DOCTORS), w, re.I)
         if doctor:
             words[0] = doctor.group(1)
-        elif len(w) > 4 and re.search(r"[кчтрнл]у$", w, re.I) and w.lower() not in VERBS_U:
+        elif len(w) > 4 and re.search(r"[кчтрнлд]у$", w, re.I) and w.lower() not in VERBS_U:  # "олимпиаду"
             words[0] = w[:-1] + "а"
         elif re.search(r"ию$", w, re.I):
             words[0] = w[:-1] + "я"
