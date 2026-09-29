@@ -55,6 +55,8 @@ The audio starts at the end of «Орфей», but the edge can be fuzzy: the ph
 | `{"type":"mode","personal":true}` / `false` | The current section: right after `hello` and on every change — by the button, by voice («давай поговорим о личном» / «хватит о личном») or after 10 minutes of silence. The phone shows the "Personal" badge from this message, not from its own button |
 | `{"type":"enroll","count":3,"needed":5,"mode":"strict"}` | Owner's voice: how many phrases of those needed are enrolled, the server's mode (`off` — no check, `log` — checks and answers everyone, `strict` — answers only the owner). Right after `hello` and after every enrollment phrase; `"error":"…"` — why a phrase was rejected (e.g. too short) |
 
+| `{"type":"announce","text":"…","sample_rate":22050}` | The server speaks by itself, not in answer to a phrase: a planner reminder ("Напоминаю: через 15 минут, в 19:00, — тренировка"), `remind` minutes before an event. Binary voice frames follow, then `{"type":"announce_end"}`. The phone plays it only between conversations (and with "Spoken reminders" on); otherwise it skips it |
+
 An answer without a voice is fine too: `reply`, then `audio_end` right away, without `audio`.
 The server must answer within 30 s after `stop`, otherwise the phone assumes there will be no answer.
 

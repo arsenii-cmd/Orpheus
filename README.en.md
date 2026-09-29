@@ -25,6 +25,7 @@ microphone → Silero VAD → GigaAM v3 → Ollama (Qwen3 4B) → Piper → spea
 - **Planner, notes, memory.** Works with [Planner](https://github.com/arsenii-cmd/Planner): events,
   tasks and notes added by voice show up on the phone and the desktop.
 - **Only your voice.** An owner voiceprint: the TV, guests and someone else's «Орфей» get no answer.
+- **Reminds by itself.** 15 minutes before a plan with a reminder it says in your earbud: «Напоминаю: через 15 минут, в 19:00, — тренировка». In the morning the day's first answer ends with a summary: what is ahead, the weather, and "take an umbrella" when it rains and a run is planned.
 - **"Personal".** A separate encrypted memory for private conversations; the key lives only on the phone.
 - **Android app.** A background service, an on-device wake word (Vosk), earbud touch-and-hold via the
   system "digital assistant", Bluetooth earbud microphone.

@@ -173,7 +173,7 @@ def test_a_call_written_as_text_is_made_not_said():
     assert text_call("hello{x:1}") is None
     brain = make([{"message": {"content": p}} for p in ["remember{fact:", '<|"|>Любит чай<|"|>}', " Запомнил!"]] +
                  [{"done": True}])
-    assert "".join(brain.ask("я люблю чай", now=NOW)) == "Запомнил."
+    assert "".join(brain.ask("кстати, чай я люблю зелёный", now=NOW)) == "Запомнил."
     assert brain.memory.facts() == [(1, "Любит чай")]
 
 

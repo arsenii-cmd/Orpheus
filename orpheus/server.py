@@ -20,6 +20,7 @@ import os
 import re
 import threading
 import time
+from datetime import date, datetime, timedelta
 from http import HTTPStatus
 from pathlib import Path
 
@@ -29,7 +30,8 @@ from websockets.asyncio.server import serve
 from .brain import Brain
 from .config import SAMPLE_RATE, Config
 from .memory import Memory, SealedMemory
-from .planner import from_config as planner_tools
+from .numbers import plural
+from .planner import Unavailable, from_config as planner_tools
 from .secure import WrongKey, parse_key, shred
 from .speech import Sentences, Voice
 from .vectors import load_embedder
@@ -153,7 +155,50 @@ class Orpheus:
         except Exception as exc:  # Ollama not up yet at boot: the server starts all the same, the model comes later
             log("модель не прогрета: %s" % exc)
         self.turn_lock = asyncio.Lock()
+        self.phones = set()  # the connections' send(), for what the server says by itself (reminders)
+        self.last_voice = ""
+        self.reminded = set()
         log("модели загружены за %.1f с" % (time.monotonic() - t))
+
+    async def reminders(self):
+        """The planner's reminders said aloud on the phone ("Напоминаю: через 15 минут, в 19:00, — тренировка"):
+        an event's "remind" minutes before its start, once, while a phone is connected (the Planner's app only
+        shows a notification, which in a pocket nobody sees)."""
+        tools = self.brain.planner
+        if tools is None:
+            return
+        while True:
+            await asyncio.sleep(20)
+            if not self.phones:
+                continue
+            now = datetime.now()
+            try:
+                items = await asyncio.to_thread(tools.planner.items, now.date(), now.date() + timedelta(days=1))
+            except (Unavailable, OSError, ValueError):
+                continue
+            for key, item in due_reminders(items, now, self.reminded):
+                text = reminder_text(item)
+                async with self.turn_lock:  # never in the middle of a reply
+                    try:
+                        samples, rate = await asyncio.to_thread(self.voice(self.last_voice).synth, text)
+                    except Exception as exc:
+                        log("напоминание не озвучено (%s)" % type(exc).__name__)
+                        continue
+                    pcm = to_pcm16(samples)
+                    step = int(rate * AUDIO_CHUNK_SEC) * 2
+                    for send in list(self.phones):
+                        try:
+                            await send({"type": "announce", "text": text, "sample_rate": rate})
+                            for i in range(0, len(pcm), step):
+                                await send(pcm[i:i + step])
+                            await send({"type": "announce_end"})
+                        except Exception:
+                            pass  # that connection is going: the others still get it
+                self.reminded.add(key)
+                log("напоминание: %s" % text)
+            if len(self.reminded) > 500:
+                today = now.date().isoformat()
+                self.reminded = {k for k in self.reminded if k[1] >= today}
 
     def voice(self, name):
         return self.voices.get(name) or self.voices.get(self.default_voice) or self.voices["male"]
@@ -220,6 +265,7 @@ class Orpheus:
                 # nothing said (the room's noise): back to waiting for «Орфей», no new follow-up window
                 await send({"type": "audio_end", "expect_reply": False, "listen": False})
                 return
+            self.last_voice = voice or getattr(self, "last_voice", "")
             reply, first_audio = await self._answer(send, text, self.voice(voice))
             timing = "%.1f с | STT %.2f с | первый звук через %s%s" % (
                 seconds, t_stt, "%.2f с" % (first_audio - t0) if first_audio else "—", voice_note)
@@ -309,6 +355,36 @@ class Orpheus:
         return reply, first_audio
 
 
+def reminder_text(item):
+    """"Напоминаю: через 15 минут — тренировка." for an item whose reminder is due."""
+    title = item.get("title") or "событие"
+    if not title[:2].isupper():  # "ЕГЭ" stays as it is
+        title = title[:1].lower() + title[1:]
+    minutes = int(item.get("remind") or 0)
+    if minutes <= 0:
+        return "Напоминаю: сейчас — %s." % title
+    if minutes % 60 == 0:
+        hours = minutes // 60
+        when = "через час" if hours == 1 else "через %d %s" % (hours, plural(hours, "час", "часа", "часов"))
+    else:
+        when = "через %d %s" % (minutes, plural(minutes, "минуту", "минуты", "минут"))
+    return "Напоминаю: %s, в %s, — %s." % (when, item["start_time"], title)
+
+
+def due_reminders(items, now, done):
+    """The events whose reminder time has come (their "remind" minutes before the start) and not yet said: in
+    [done] by (id, date, time, remind), so a moved one is said again at its new time."""
+    due = []
+    for i in items:
+        if i.get("kind") != "event" or i.get("done") or not i.get("start_time") or not isinstance(i.get("remind"), int):
+            continue
+        start = datetime.combine(date.fromisoformat(i["date"]), datetime.strptime(i["start_time"], "%H:%M").time())
+        key = (i["id"], i["date"], i["start_time"], i["remind"])
+        if key not in done and start - timedelta(minutes=i["remind"]) <= now < start + timedelta(minutes=1):
+            due.append((key, i))
+    return due
+
+
 def log(text):
     print(time.strftime("%H:%M:%S"), text, flush=True)
 
@@ -368,6 +444,7 @@ async def run(config: Config, host: str, port: int):
                 kind = msg.get("type")
                 if kind == "hello":
                     log("устройство: %s" % msg.get("device"))
+                    orpheus.phones.add(send)
                     await orpheus.unlock(send, msg.get("personal_key"))
                     # a new connection starts in the ordinary section: «Личное» only by its command or the button,
                     # never carried over from before (the app restarted and was in «Личное» at once)
@@ -403,8 +480,10 @@ async def run(config: Config, host: str, port: int):
         finally:
             if task and not task.done():
                 task.cancel()
+            orpheus.phones.discard(send)
             log("отключился %s" % peer)
 
+    reminding = asyncio.create_task(orpheus.reminders())  # kept referenced: a bare task may be collected
     async with serve(session, host, port, process_request=check, max_size=None,
                      ping_interval=20, ping_timeout=20):
         log("слушаю %s:%d (разрешено: %s)" % (host, port, ", ".join(map(str, ALLOWED))))

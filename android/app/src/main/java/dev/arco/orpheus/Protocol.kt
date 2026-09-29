@@ -58,6 +58,8 @@ object Protocol {
             )
             "error" -> ServerMessage.Error(o.optString("message", "ошибка сервера"), id)
             "mode" -> ServerMessage.Mode(o.optBoolean("personal", false))
+            "announce" -> ServerMessage.Announce(o.optString("text", ""), o.optInt("sample_rate", 22050))
+            "announce_end" -> ServerMessage.AnnounceEnd
             "enroll" -> ServerMessage.Enroll(
                 o.optInt("count", 0), o.optInt("needed", 5), o.optString("mode", ""),
                 o.optString("error").takeIf { it.isNotBlank() },
@@ -88,5 +90,8 @@ sealed interface ServerMessage {
     /** The owner's voice on the server: [count] phrases recorded of [needed]; [mode] "off" | "log" | "strict";
      *  [error] why the last phrase was not taken. Sent after "hello" and after each enrollment phrase. */
     data class Enroll(val count: Int, val needed: Int, val mode: String, val error: String? = null) : ServerMessage
+    /** Said by the server by itself (a planner's reminder): binary frames at [sampleRate] follow, then [AnnounceEnd]. */
+    data class Announce(val text: String, val sampleRate: Int) : ServerMessage
+    data object AnnounceEnd : ServerMessage
     data class Unknown(val raw: String) : ServerMessage
 }

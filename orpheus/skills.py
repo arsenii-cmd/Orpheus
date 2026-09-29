@@ -266,6 +266,9 @@ REACTION = re.compile(r"^\W*(?:(?:ну|очень|как|вот)\s+)?(?:заба
 NEWS = re.compile(r"(?<!\w)новост", re.I)
 
 
+# plans that are outdoors: the morning's rain warning names them
+OUTDOOR = re.compile(r"пробежк|прогулк|(?<!\w)бег(?!\w)|футбол|баскетбол|велосипед|велик|пикник|поход|шашлык|рыбалк|дач|парк|"
+                     r"забег|гулять|погулять|самокат|ролик|на\s+улиц|стадион|пляж", re.I)
 PART_OF_DAY = re.compile(r"(?<!\w)(?:с\s+)?(утром|утра|вечером|днём|днем)(?!\w)(?!\s+(?:в|к)\s+\d)", re.I)
 PART_TIME = {"утр": "9:00", "веч": "19:00", "днё": "13:00", "дне": "13:00"}
 
@@ -1051,6 +1054,31 @@ class Skills:
         fact_id = memory.remember(_cap(fact))
         self.brain.refresh_facts()
         self._can_undo(lambda: (memory.forget(fact_id), self.brain.refresh_facts(), "Хорошо, это я забыл.")[2])
+        return "Запомнил."
+
+    def do_tell_fact(self, m, now):
+        """"Моего друга зовут Тимур", "моя любимая еда — пельмени", "я не ем острое": said about oneself, to stay.
+        Told this, the model said "запомнил" and saved nothing (and its claim was then dropped: "Этого я не сделал")."""
+        heard = self.heard.strip()
+        if "?" in heard or TO_ME.search(heard) or _has_time(heard) or re.search(r"(?<!\w)(?:если|когда|хочу|хотел)", heard, re.I):
+            return None  # "я люблю тебя", "я люблю по субботам в 10 бегать", "я не люблю, когда …": not such a fact
+        words = re.findall(r"\w+", m.slots.get("what", "") or m.slots.get("name", "") or m.slots.get("where", "") or "x")
+        if len(words) > 6:
+            return None
+        memory = self.brain.active
+        fact = _cap(re.sub(r"^\W*(?:(?:ну|слушай|кстати|короче|вот|а)\W+)*", "", heard).rstrip(" .!"))
+        # a newer word for the same thing replaces the old one: "моего друга зовут …", "моя любимая еда …"
+        key = re.match(r"(?i)((?:мо\w+)\s+(?:любим\w+\s+)?\w+)\s+(?:зовут|звать|это|—)", fact)
+        old = None
+        if key:
+            low = key.group(1).lower()
+            old = next((i for i, t in memory.facts() if t.lower().startswith(low)), None)
+        if old is not None:
+            memory.update_fact(old, fact)
+        else:
+            fact_id = memory.remember(fact)
+            self._can_undo(lambda: (memory.forget(fact_id), self.brain.refresh_facts(), "Хорошо, это я забыл.")[2])
+        self.brain.refresh_facts()
         return "Запомнил."
 
     def do_forget(self, m, now):
@@ -1863,9 +1891,16 @@ class Skills:
                 said.append("По плану: %s." % "; ".join(parts) if parts else "Планов на сегодня нет.")
             except Unavailable:
                 said.append("Планировщик сейчас не отвечает.")
+                running, ahead = [], []
+        else:
+            running, ahead = [], []
         if self.weather is not None:
             try:
                 said.append(self.weather.day_text(self.weather.home, now.date()))
+                # "Завтра дождь, а у тебя пробежка": what is done outside, when rain is expected
+                outside = [i for i in running + ahead if OUTDOOR.search(i.get("title") or "")]
+                if outside and self.weather.precipitation(self.weather.home, now.date()).startswith("Да"):
+                    said.append("Возьми зонт: дождь, а у тебя %s." % spoken_item(outside[0]))
             except Offline:
                 pass
         return " ".join(said)

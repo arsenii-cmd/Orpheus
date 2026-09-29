@@ -78,4 +78,10 @@ class ProtocolTest {
         assertEquals(ServerMessage.AudioEnd(true, id = 3), Protocol.parse("""{"type":"audio_end","expect_reply":true,"id":3}"""))
         assertEquals(ServerMessage.Reply("да", null), Protocol.parse("""{"type":"reply","text":"да"}"""))  // an older server
     }
+
+    @Test fun aReminderSaidByTheServer() {
+        assertEquals(ServerMessage.Announce("Напоминаю: через 15 минут, в 19:00, — тренировка.", 22050),
+            Protocol.parse("""{"type":"announce","text":"Напоминаю: через 15 минут, в 19:00, — тренировка.","sample_rate":22050}"""))
+        assertEquals(ServerMessage.AnnounceEnd, Protocol.parse("""{"type":"announce_end"}"""))
+    }
 }

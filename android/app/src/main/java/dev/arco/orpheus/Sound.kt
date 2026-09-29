@@ -127,6 +127,28 @@ class Player(private val onFinished: (Event.ReplyDone) -> Unit) {
 }
 
 /** Short tones instead of sound files: rising means "I'm listening", falling means "got it". */
+/** A whole utterance played at once (a reminder the server said by itself), on the same stream as the replies. */
+object Announcer {
+    fun play(pcm: ByteArray, rate: Int, onDone: () -> Unit) {
+        if (pcm.size < 2) return onDone()
+        val track = AudioTrack.Builder()
+            .setAudioAttributes(ASSISTANT_AUDIO)
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(rate)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+            )
+            .setTransferMode(AudioTrack.MODE_STATIC)
+            .setBufferSizeInBytes(pcm.size)
+            .build()
+        track.write(pcm, 0, pcm.size)
+        track.play()
+        Handler(Looper.getMainLooper()).postDelayed({ track.release(); onDone() }, pcm.size / 2 * 1000L / rate + 300)
+    }
+}
+
 object Earcons {
     private const val RATE = 22_050
 

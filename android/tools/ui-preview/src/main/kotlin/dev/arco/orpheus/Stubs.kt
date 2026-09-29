@@ -29,6 +29,7 @@ data class Settings(
     val earcons: Boolean = true,
     val headsetMic: Boolean = true,
     val headsetStrict: Boolean = true,
+    val announce: Boolean = true,
     val voice: String = "male",
     val personalKey: String = "",
 )

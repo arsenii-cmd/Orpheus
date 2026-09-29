@@ -73,3 +73,21 @@ def test_a_new_connection_starts_out_of_personal():
     o.brain = B()
     asyncio.run(o.leave_personal("новое подключение"))
     assert o.brain.personal is False
+
+
+def test_reminders_are_said_once_when_their_time_comes():
+    from datetime import datetime
+    items = [{"id": "t", "kind": "event", "title": "Тренировка", "date": "2026-09-30", "start_time": "19:00", "remind": 15, "done": False},
+             {"id": "e", "kind": "event", "title": "ЕГЭ", "date": "2026-09-30", "start_time": "22:00", "remind": 60, "done": False},
+             {"id": "n", "kind": "event", "title": "Без напоминания", "date": "2026-09-30", "start_time": "19:00", "remind": None, "done": False},
+             {"id": "k", "kind": "task", "title": "Купить хлеб", "date": "2026-09-30", "remind": 15, "done": False}]
+    done = set()
+    assert server.due_reminders(items, datetime(2026, 9, 30, 18, 44), done) == []
+    due = server.due_reminders(items, datetime(2026, 9, 30, 18, 45), done)
+    assert [i["id"] for _, i in due] == ["t"]
+    assert server.reminder_text(due[0][1]) == "Напоминаю: через 15 минут, в 19:00, — тренировка."
+    done.add(due[0][0])
+    assert server.due_reminders(items, datetime(2026, 9, 30, 18, 50), done) == []
+    moved = [dict(items[0], start_time="20:00")]  # moved: said again at its new time
+    assert server.due_reminders(moved, datetime(2026, 9, 30, 19, 45), done)
+    assert server.reminder_text(items[1]) == "Напоминаю: через час, в 22:00, — ЕГЭ."

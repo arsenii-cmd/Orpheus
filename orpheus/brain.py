@@ -192,6 +192,8 @@ NUDGE = "[ответ не получен: ответь ещё раз; если �
 NUDGE_AFTER = "[ответь по тому, что нашлось выше, одним-двумя предложениями]"
 READ_ONLY = {"web_search", "find_notes", "plans", "weather"}
 NO_ANSWER = "Не получилось ответить. Повтори, пожалуйста."
+# the morning's day summary is not added to these: they are the day already, or no conversation at all
+NO_BRIEFING = {"greet", "plan_ask", "plan_left", "plan_next", "mode", "stop", "pause", "ack", "bye", "enroll", None}
 
 
 def claims_done(text):
@@ -271,6 +273,7 @@ class Brain:
         self.planner = planner
         self.llm = llm or Ollama(config)
         self.clock = clock
+        self.briefing = True  # the morning's day summary after the first answer (benches turn it off)
         self.history = []
         self.since = time.time()  # when this conversation began (the wall clock, as the memory keeps it)
         self.last_turn = clock()
@@ -382,7 +385,29 @@ class Brain:
         return items[:4]
 
     def ask(self, text, now=None):
-        """Yield the reply in pieces as it is generated."""
+        """Yield the reply in pieces as it is generated; the first conversation of a morning ends with the day."""
+        said = ""
+        for piece in self._ask(text, now):
+            said += piece
+            yield piece
+        note = self._morning_note(now or datetime.now()) if said.strip() else None
+        if note:
+            piece = " " + note
+            self.last_reply = (self.last_reply + piece).strip()
+            yield piece
+
+    def _morning_note(self, now):
+        """In the morning, the first answer of the day brings the day along: what is ahead, the weather, a warning
+        ("Доброе утро" said by the owner already brings it: greet's own)."""
+        if not self.briefing or self.personal or not 5 <= now.hour < 12 or self.handled in NO_BRIEFING:
+            return None
+        day = (now - timedelta(hours=4)).date().isoformat()  # a day starts at 4 in the morning, as greet's
+        if self.memory.meta("summary_day") == day:
+            return None
+        self.memory.meta("summary_day", day)
+        return "Кстати, доброе утро. " + self.skills._day_summary(now)
+
+    def _ask(self, text, now=None):
         if self.clock() - self.last_turn > self.config.idle_reset:
             if not self.set_personal(False):
                 self.reset()

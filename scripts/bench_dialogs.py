@@ -732,6 +732,7 @@ def run(dialog, embedder, weather, search, plannerd, llm=None):
             dead = Web("http://127.0.0.1:9", timeout=3)
             weather, search = Weather(dead, now=lambda: NOW), Search(dead)
         brain = Brain(config, memory, llm=llm, private=private, planner=planner, weather=weather, search=search)
+        brain.briefing = False  # no morning's day summary: the checks are about the phrase
         rounds = []  # the model's requests of the phrase: (prompt tokens, seconds reading the new ones; generated, seconds)
         chat = brain.llm.chat
 

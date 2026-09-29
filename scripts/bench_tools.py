@@ -313,6 +313,7 @@ def run(name, phrases, check, plannerd):
         config = Config()
         memory = Memory(":memory:", EMBEDDER)
         brain = Brain(config, memory, planner=PlannerTools(Planner(BASE), embedder=EMBEDDER))
+        brain.briefing = False  # no morning's day summary: the checks are about the phrase
         replies, calls, turns = [], [], []
         for phrase in phrases:
             start, first, reply = time.monotonic(), None, ""

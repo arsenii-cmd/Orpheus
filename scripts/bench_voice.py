@@ -99,6 +99,7 @@ def main():
         weather, search = online(config)  # through ORPHEUS_PROXY, as the server does
         brain = Brain(config, Memory(":memory:", embedder), planner=PlannerTools(Planner(BASE), embedder=embedder),
                       weather=weather, search=search)
+        brain.briefing = False  # no morning's day summary: the checks are about the phrase
         for phrase, expected in PHRASES:
             for who in speakers:
                 samples, rate = voices[who].synth(phrase)

@@ -27,6 +27,8 @@ data class Settings(
     val headsetMic: Boolean = true,
     /** In the earbuds, only the owner's voice gets an answer; through the phone's microphone, everyone's. */
     val headsetStrict: Boolean = true,
+    /** The planner's reminders said aloud when their time comes ("Напоминаю: через 15 минут — тренировка"). */
+    val announce: Boolean = true,
     /** The server's voice for the replies: "male" (Piper ruslan) or "female" (Piper irina). */
     val voice: String = "male",
     /** The key of "Личное" (base64, 32 bytes); on disk only wrapped by the Android Keystore (KeyVault). */
@@ -49,6 +51,7 @@ private object Keys {
     val headsetMic = booleanPreferencesKey("headset_mic")
     val headsetStrict = booleanPreferencesKey("headset_strict")
     val voice = stringPreferencesKey("voice")
+    val announce = booleanPreferencesKey("announce")
     val personalKey = stringPreferencesKey("personal_key_wrapped")
 }
 
@@ -65,6 +68,7 @@ fun Context.settingsFlow(): Flow<Settings> = store.data.map { p ->
         headsetMic = p[Keys.headsetMic] ?: d.headsetMic,
         headsetStrict = p[Keys.headsetStrict] ?: d.headsetStrict,
         voice = p[Keys.voice] ?: d.voice,
+        announce = p[Keys.announce] ?: d.announce,
         personalKey = KeyVault.unwrap(p[Keys.personalKey] ?: ""),
     )
 }
@@ -81,6 +85,7 @@ suspend fun Context.saveSettings(s: Settings) {
         p[Keys.headsetMic] = s.headsetMic
         p[Keys.headsetStrict] = s.headsetStrict
         p[Keys.voice] = s.voice
+        p[Keys.announce] = s.announce
         p[Keys.personalKey] = KeyVault.wrap(s.personalKey.trim())
     }
 }

@@ -636,6 +636,8 @@ fun SettingsScreen(
                         Spacer(Modifier.height(12.dp))
                         Toggle("Строгий режим в наушниках", "В наушниках отвечать только на твой голос. Без них — всем", s.headsetStrict) { s = s.copy(headsetStrict = it) }
                     }
+                    Spacer(Modifier.height(12.dp))
+                    Toggle("Напоминания голосом", "«Через 15 минут — тренировка»: когда подходит время дела с напоминанием", s.announce) { s = s.copy(announce = it) }
                 }
             }
 

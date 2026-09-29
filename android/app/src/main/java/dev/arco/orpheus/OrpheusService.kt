@@ -112,6 +112,10 @@ class OrpheusService : Service() {
     @Volatile private var record: AudioRecord? = null
     /** Called by the buds' touch (settings.trigger "touch"): the microphone only while a conversation goes on. */
     @Volatile private var touchMode = false
+    /** A reminder the server is saying by itself, gathered until its end (null: none, or not to be played now). */
+    private var announcing: java.io.ByteArrayOutputStream? = null
+    private var announceRate = 22_050
+    private var announceText = ""
     /** Whether the microphone thread may read now: always with the wake word, per conversation by touch. */
     @Volatile private var micOpen = true
     private val micGate = Object()
@@ -439,6 +443,21 @@ class OrpheusService : Service() {
             is ServerMessage.Enroll -> Bus.enroll.update {
                 it.copy(count = message.count, needed = message.needed, mode = message.mode, error = message.error, recording = false)
             }
+            is ServerMessage.Announce -> {
+                // only between conversations: never over a reply or into a phrase being said
+                announcing = if (settings.announce && phase in IDLE && phase != Phase.Off) java.io.ByteArrayOutputStream() else null
+                announceRate = message.sampleRate
+                announceText = message.text
+            }
+            ServerMessage.AnnounceEnd -> {
+                val pcm = announcing?.toByteArray()
+                announcing = null
+                if (pcm != null && phase in IDLE) {
+                    Bus.say(false, announceText)
+                    musicPause.hold(true)
+                    Announcer.play(pcm, announceRate) { if (phase in IDLE) musicPause.hold(false) }
+                }
+            }
             is ServerMessage.Unknown -> {}
         }
         // what was said never goes to the system log (anyone with USB could read it, "Личное" too): its length only
@@ -447,6 +466,11 @@ class OrpheusService : Service() {
     }
 
     private fun onServerAudio(pcm: ByteArray) {
+        val announce = announcing
+        if (announce != null) {
+            announce.write(pcm)
+            return
+        }
         if (phase == Phase.Speaking) player.chunk(pcm)
     }
 

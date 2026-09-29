@@ -1206,9 +1206,22 @@ def test_what_a_talk_with_him_showed_the_second_time():
 
 
 def test_forget_what_was_only_said_in_the_talk():
-    # "моего друга зовут Тимур" (never saved), "забудь про Тимура" -> "Такого я не помню", and he named him after
-    brain = make(replies=[text("Понял, Тимур."), text("Не знаю.")])
-    say(brain, "моего друга зовут Тимур")
+    # a name only said in the talk (never saved), "забудь про Тимура" -> "Такого я не помню", and he named him after
+    brain = make(replies=[text("Понял, Тимур."), text("Не знаю."), text("Не знаю.")])
+    say(brain, "я сегодня видел Тимура в парке")
     assert say(brain, "забудь про Тимура") == "Хорошо, забыл."
     say(brain, "как зовут моего друга")
     assert not any("Тимур" in str(m.get("content")) for m in brain.llm.requests[-1] if m["role"] != "system")
+
+
+def test_what_one_tells_about_oneself_is_remembered_by_the_program():
+    # told "моего друга зовут Тимур", the model said "запомнил" and saved nothing
+    brain = make(replies=[text("И я тебя.")])
+    assert say(brain, "моего друга зовут Тимур") == "Запомнил."
+    say(brain, "моя любимая еда это пельмени")
+    say(brain, "я не ем острое")
+    say(brain, "моего друга зовут Тима")  # a newer word for the same: replaces
+    facts = [t for _, t in brain.memory.facts()]
+    assert facts == ["Моего друга зовут Тима", "Моя любимая еда это пельмени", "Я не ем острое"]
+    assert say(brain, "я люблю тебя") == "И я тебя."  # not a fact to keep
+    assert len(brain.memory.facts()) == 3
