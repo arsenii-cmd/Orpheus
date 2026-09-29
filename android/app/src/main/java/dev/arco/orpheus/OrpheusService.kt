@@ -58,6 +58,8 @@ class OrpheusService : Service() {
         private const val NOW = -2L
         /** No conversation going on: by touch, the microphone is closed in these. */
         private val IDLE = setOf(Phase.Off, Phase.Wake, Phase.Paused)
+        /** A conversation going on: the owner's music waits. */
+        private val CONVERSATION = setOf(Phase.Listening, Phase.Thinking, Phase.Speaking, Phase.FollowUp)
 
         /** Not started without the microphone: a foreground service that never calls startForeground crashes the app. */
         fun start(context: Context) {
@@ -141,7 +143,7 @@ class OrpheusService : Service() {
         super.onCreate()
         link = ServerLink(::onServer, ::onServerAudio) { dispatch(Event.Failure("связь с сервером потеряна")) }
         player = Player { done -> dispatch(done) }
-        musicPause = MusicPause(this)
+        musicPause = MusicPause(this) { phase == Phase.Speaking || OwnSound.busy }
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL, "Орфей", NotificationManager.IMPORTANCE_LOW).apply {
@@ -248,6 +250,8 @@ class OrpheusService : Service() {
         }
         setMic(true)
         summoning = true  // the settings arriving now (a cold start by touch) must not close it again
+        // the music stops at the touch itself, not ~0.5 s later with the beep (the buds' link is being set up)
+        musicPause.hold(true)
         val since = SystemClock.elapsedRealtime()
         main.post(object : Runnable {
             override fun run() {
@@ -255,6 +259,7 @@ class OrpheusService : Service() {
                 val waited = SystemClock.elapsedRealtime() - since
                 if (!micOpen) {  // closed again meanwhile («Слушать снова» from a pause): no phrase into a closed mic
                     summoning = false
+                    if (machine.phase !in CONVERSATION) musicPause.hold(false)
                     return
                 }
                 // the recording through the buds, and the server: a touch that started Orpheus from off waits
@@ -277,6 +282,7 @@ class OrpheusService : Service() {
         }
         pendingFrom = NOW
         dispatch(Event.Talk)
+        if (machine.phase !in CONVERSATION) musicPause.hold(false)  // taken at the touch: no conversation after all
         if (touchMode && machine.phase in IDLE) setMic(false)  // the Talk did not start a conversation
     }
 
@@ -341,11 +347,13 @@ class OrpheusService : Service() {
         if (event != Event.Tick || machine.phase != before) {
             android.util.Log.i("Orpheus", "$before + $event -> ${machine.phase} $effects")
         }
+        // the owner's music waits while the conversation goes on (from «Орфей» to the end of the follow-up); taken
+        // before the beep, so the beep is not over the music and is not taken for it
+        if (machine.phase != before) musicPause.hold(machine.phase in CONVERSATION)
+        if (event == Event.Tick) musicPause.keep()
         for (effect in effects) apply(effect)
         if (machine.phase != before) {
             phase = machine.phase
-            // the owner's music waits while the conversation goes on (from «Орфей» to the end of the follow-up)
-            musicPause.hold(phase in setOf(Phase.Listening, Phase.Thinking, Phase.Speaking, Phase.FollowUp))
             Bus.phase.value = machine.phase
             // by touch, the conversation is over: the microphone and the buds are let go until the next touch
             if (touchMode && machine.phase in IDLE && micOpen) setMic(false)

@@ -584,7 +584,7 @@ def test_am_i_free_looks_at_that_part_of_the_day():
     assert say(brain, "Я послезавтра вечером свободен?") == "Да, послезавтра вечером ничего не запланировано."
     assert say(brain, "Свободен ли я завтра ночью?") == \
         "Да, завтра ночью ничего не запланировано. Из задач на день: «Позвонить в банк»."
-    assert say(brain, "Я завтра утром занят?") == "Нет, завтра утром: в 10:00 Занятие по русскому языку; с 10:00 до 13:00 Хакатон."
+    assert say(brain, "Я завтра утром занят?") == "Да, завтра утром: в 10:00 Занятие по русскому языку; с 10:00 до 13:00 Хакатон."
     assert say(brain, "Мы свободны в среду?") == "Да, в среду, 30 сентября ничего не запланировано."
 
 
@@ -1225,3 +1225,58 @@ def test_what_one_tells_about_oneself_is_remembered_by_the_program():
     assert facts == ["Моего друга зовут Тима", "Моя любимая еда это пельмени", "Я не ем острое"]
     assert say(brain, "я люблю тебя") == "И я тебя."  # not a fact to keep
     assert len(brain.memory.facts()) == 3
+
+
+def test_days_until_a_plan_by_its_name():
+    # "сколько дней до кр по алгебре": the model counted from the wrong day and took the mock exam for the ЕГЭ
+    brain = make(*WEEK, {"id": "k", "kind": "task", "title": "Кр по алгебре", "date": "2026-09-28"})
+    assert say(brain, "сколько дней до кр по алгебре") == "До «Кр по алгебре» 3 дня: понедельник, 28 сентября."
+    assert say(brain, "через сколько у меня хакатон") == "«Хакатон» уже завтра в 10:00."
+    assert say(brain, "сколько дней до нового года").startswith("До Нового года")
+
+
+def test_corrections_as_they_are_said_move_it_and_memory_is_updated():
+    # the third talk: "не в 12 а в 14", "не, в 15", "не, на четверг", "и в 10" went to the model, which said
+    # "переношу" each time and moved nothing; "теперь друга зовут Миша" -> "обновляю", the old one kept
+    brain = make(replies=[text("м")] * 3)
+    say(brain, "добавь на завтра встречу в 12")
+    assert "14:00" in say(brain, "не в 12 а в 14")
+    assert "16:00" in say(brain, "блин не в 14 в 16")
+    assert "13:00" in say(brain, "нет в час")
+    assert "четверг" in say(brain, "не, на четверг")
+    assert brain.skills.planner.planner.rows["new"]["date"] == "2026-10-01"
+    say(brain, "моего друга зовут Серёжа")
+    say(brain, "теперь друга зовут Миша")
+    say(brain, "мне 17 лет")
+    assert [t for _, t in brain.memory.facts()] == ["Моего друга зовут Миша", "Мне 17 лет"]
+
+
+def test_plans_said_as_they_are_said_are_added_with_clean_titles():
+    # the third talk: each of these went to the model ("Этого я не сделал") or left bits of speech in the title
+    from orpheus.planner import tidy_title
+    brain = make(*WEEK, replies=[text("Отдохни.")])
+    for said, sent in [("у меня в субботу турнир", "у меня в субботу турнир"), ("надо купить молоко", "купить молоко"),
+                       ("не забудь мне завтра нужно отнести книги в библиотеку", "завтра нужно отнести книги в библиотеку"),
+                       ("ну и задачу сделать доклад по истории на четверг", "сделать доклад по истории на четверг"),
+                       ("запиши на завтра футбол с 16 до 18", "завтра футбол с 16 до 18")]:
+        assert say(brain, said).startswith("Добавил"), said
+        assert brain.skills.planner.planner.quick_text == sent, said
+    assert say(brain, "мне надо отдохнуть") == "Отдохни."
+    assert tidy_title("Ну у меня в пробное собеседование запиши") == "Пробное собеседование"
+    assert tidy_title("Слушай в у меня стоматолог") == "Стоматолог"
+    assert tidy_title("Следующий про кр") == "Кр"
+
+
+def test_am_i_free_at_an_hour_and_am_i_busy():
+    brain = make(*WEEK)
+    assert say(brain, "я свободен завтра в три").startswith("Да, завтра в 15:00 ничего не запланировано")
+    assert say(brain, "я свободен завтра в 10").startswith("Нет, завтра в 10:00:")
+    assert say(brain, "занят ли я завтра днём").startswith("Да, завтра днём:")
+
+
+def test_a_long_week_is_summed_up_aloud():
+    # "что у меня на этой неделе" read out ~1500 characters
+    many = [{"id": "x%d" % k, "kind": "task", "title": "Дело %d" % k, "date": "2026-09-2%d" % (5 + k % 3)} for k in range(14)]
+    brain = make(*many)
+    reply = say(brain, "что у меня на этой неделе")
+    assert reply.startswith("14 записей за 3 дня. Ближайшее:") and len(reply) < 250

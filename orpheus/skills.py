@@ -144,6 +144,11 @@ _WHEN_WORD = (r"(?:на|в|во|к|с|до|к\s+\d|через|сегодня|з�
 WHEN_ONLY = re.compile(r"%s(?:\s+%s)*" % (_WHEN_WORD, _WHEN_WORD))
 
 
+# the start of a correction: "нет", "не, ", "ой", "блин", "лучше", and "не в 12, а" - what it is not
+CORRECTION = re.compile(r"^\W*(?:(?:нет|не(?!\s+(?:в|на|к)\s)|ой|блин|лучше|давай|хотя|точнее|вернее|стоп|упс|а|и)(?!\w)\W*)*"
+                        r"(?:не\s+(?:в|на|к)\s+[\w:]+(?:\s+(?:час\w*|утра|вечера|дня))?\W+(?:а\s+)?)?", re.I)
+
+
 def when_only(text):
     """Is it only a day and a time ("Завтра в 12.", "на 15:30", "в пятницу вечером")?"""
     words = re.sub(r"[^\w\s:./]|(?<!\d)[./]|[./](?!\d)", " ", to_digits(text).lower().replace("ё", "е"))
@@ -240,7 +245,7 @@ def _city(text, lower=True):
 
 QUESTION = re.compile(r"\?|(?<!\w)(?:кто|что|где|когда|сколько|как|какой|какая|какое|какие|каков\w*|почему|зачем|чей|чья|ли)(?!\w)", re.I)
 # "Выясни, кто …", "найди в интернете …": the words asking for a search are not what to search for
-ASKING = re.compile(r"^\W*(?:(?:а|ну|слушай|орфей)\W+)*(?:выясни|узнай|разузнай|найди|поищи|посмотри|проверь|глянь|подскажи|скажи)"
+ASKING = re.compile(r"^\W*(?:(?:а|ну|слушай|орфей)\W+)*(?:выясни|узнай|разузнай|найди|поищи|посмотри|проверь|глянь|подскажи|скажи|расскажи|покажи)"
                     r"(?:\s+(?:мне|пожалуйста))*(?:\s+в\s+(?:интернете|сети))?[\s,:]+", re.I)
 # after a search, "а сколько она будет стоить?" is about the same thing: searched again, with it
 ABOUT_THAT = re.compile(r"(?<!\w)(?:он|она|оно|они|его|её|ее|их|ему|ей|им|нему|ней|них|этот|эта|это|эти|этого|этой|этих|"
@@ -411,9 +416,20 @@ MINE = re.compile(r"(?<!\w)(?:у\s+меня|мне|меня|мой|моя|моё
 NOTE_TOPIC = re.compile(r"^(?:про|о|об|на тему|насчет|насчёт|по поводу)\s+", re.I)
 
 
+# a request dropped: "забей", "проехали", "не надо"
+DISMISS = re.compile(r"(?<!\w)(?:забей|проехали|неважно|не\s+важно|не\s+надо|не\s+нужно|отмена)(?!\w)", re.I)
+# a thing to do, said with "надо", "не забыть": "купить молоко", "отнести книги", "позвонить маме"
+DUTY = re.compile(r"(?:купить|сделать|позвонить|написать|отправить|оплатить|заплатить|сдать|забрать|отнести|принести|записаться|"
+                  r"подготовить|выучить|повторить|помыть|убрать|сходить|съездить|зайти|заехать|забронировать|заказать|"
+                  r"починить|постирать|погладить|вынести|отдать|вернуть|полить|покормить|выгулять|проверить|поздравить)(?!\w)", re.I)
+
+
 def TOLD_PLAN(text):
-    """A day and a time and what, said as a statement: "в понедельник в 16:40 занятие по физике"."""
-    return (_has_day(text) and _has_time(text) and not QUESTION.search(text)
+    """A day and a time and what, said as a statement: "в понедельник в 16:40 занятие по физике"; "у меня в
+    субботу турнир" with no time too (a task of that day)."""
+    return (_has_day(text) and (_has_time(text) or re.match(r"^\W*(?:(?:ну|а|кстати|слушай|короче)\W+)*у\s+(?:меня|нас)\s", text, re.I)
+                                and not re.search(r"рожден|днюх|выходн|праздник|каникул|отпуск|свобод|занят|дел(?:а|о)?\b|план", text, re.I))
+            and not QUESTION.search(text)
             and not when_only(text)  # "завтра в 12." - no what
             and not re.search(r"(?<!\w)(?:был|была|было|были|вчера|позавчера|прошл\w*|не\s+надо|не\s+нужно)(?!\w)", text, re.I)
             # "я завтра в 10 не смогу прийти", "он сказал, что перенесёт встречу на завтра": said to someone, or
@@ -501,6 +517,7 @@ class Skills:
         self.heard = ""
         self.handled = None  # the scenario that answered, for the log
         self.last = None  # (scenario, phrase) answered last, when "а завтра?" may go on from it
+        self.side_turn = -1  # the last turn a scenario other than the plans' answered
         self.last_day = None  # the day "какое число будет в пятницу?" was about
 
     # ---------------------------------------------------------------------------------- the entry
@@ -549,6 +566,9 @@ class Skills:
             result = self._dispatch(follow, now)
             if result is not None:
                 return result
+        fix = self._correction(text)
+        if fix is not None:
+            return fix
         both = self._split(text, now)
         if both is not None:
             return both
@@ -581,6 +601,8 @@ class Skills:
                 result = "Не получилось: %s." % str(exc).rstrip(".")
             if result is not None:
                 self.handled = m.intent
+                if not m.intent.startswith("plan") and m.intent not in ("confirm", "undo"):
+                    self.side_turn = self.planner.turn if self.planner else self.turn  # "нет, на 15" after it: no correction
                 if m.intent in FOLLOWED:
                     self.last = (m.intent, text)
                 return result
@@ -684,7 +706,7 @@ class Skills:
             return "какой курс %s" % frag if currencies(frag) and len(frag.split()) <= 3 else None
         if intent == "fresh" and NEWS.search(prev) and not QUESTION.search(text) and len(frag.split()) <= 5 \
                 and not TO_ME.search(text) and not ABOUT_THAT.search(frag):
-            return "новости про %s" % frag
+            return "новости про %s" % re.sub(r"^(?:а\s+)?(?:про|о|об|по)\s+", "", frag, flags=re.I)  # not "про про технологии"
         if intent in ("web_search", "fresh"):
             # "найди, когда выйдет GTA 6" - "а сколько она будет стоить?": the model, asked this, said it
             # could not find it (searching nothing); searched again, with what the last search was about
@@ -832,9 +854,27 @@ class Skills:
                 return None
             name = "твоего дня рождения" if re.search(r"мо(его|й)|у меня", when, re.I) else when
         if target is None:
-            span = period(when, today)
+            span = period(when, today) if _has_day(when) or re.search(r"\d", when) else None
             if span is None:
-                return None
+                # "до кр по алгебре", "до пробника", "до ЕГЭ": a plan's day (the model counted from the wrong day
+                # and swapped one plan for another)
+                if self.planner is None:
+                    return None
+                item, _ = self.planner._find(re.sub(r"\s+дн\w*$", "", when), strict=True)
+                if item is None:
+                    return None
+                item = self.planner.next_of(item)
+                target = date.fromisoformat(item["date"])
+                if target < today:
+                    return "«%s» уже прошло: было %s." % (item["title"], spoken_day(target, today))
+                days = (target - today).days
+                when_ = spoken_day(target, today)
+                at = " в %s" % item["start_time"] if item.get("start_time") else ""
+                if days == 0:
+                    return "«%s» сегодня%s." % (item["title"], at)
+                if days == 1:
+                    return "«%s» уже завтра%s." % (item["title"], at)
+                return "До «%s» %d %s: %s." % (item["title"], days, plural(days, "день", "дня", "дней"), when_)
             target = span[0]
             name = "%d %s" % (target.day, MONTHS[target.month - 1])
         if target < today:
@@ -901,7 +941,8 @@ class Skills:
         if not re.search(r"\w", text):
             return None
         said_note = re.search(r"заметк|заметочк|памятк|запис[ьи]\b|записочк", normalize_low(self.heard))
-        if not said_note and self.planner is not None and (_has_time(text) or _has_day(text) and len(text.split()) <= 6):
+        span = planner_time_span(to_digits(text)) is not None  # "запиши на завтра футбол с 16 до 18" became a note
+        if not said_note and self.planner is not None and (_has_time(text) or span or _has_day(text) and len(text.split()) <= 6):
             # "запиши меня к врачу на пятницу в 10", "запиши на пятницу стрижку" are for the planner; a long text
             # with a day in it ("в субботу приедет мастер…, нужно освободить проход…") is a note
             return None
@@ -1065,14 +1106,31 @@ class Skills:
         words = re.findall(r"\w+", m.slots.get("what", "") or m.slots.get("name", "") or m.slots.get("where", "") or "x")
         if len(words) > 6:
             return None
+        if m.slots.get("age") and not re.fullmatch(r"\d{1,3}", to_digits(m.slots["age"]).strip()):
+            return None  # "мне сто лет в обед" is no age
         memory = self.brain.active
-        fact = _cap(re.sub(r"^\W*(?:(?:ну|слушай|кстати|короче|вот|а)\W+)*", "", heard).rstrip(" .!"))
-        # a newer word for the same thing replaces the old one: "моего друга зовут …", "моя любимая еда …"
-        key = re.match(r"(?i)((?:мо\w+)\s+(?:любим\w+\s+)?\w+)\s+(?:зовут|звать|это|—)", fact)
+        fact = _cap(re.sub(r"^\W*(?:(?:ну|слушай|кстати|короче|вот|а|теперь)\W+)*", "", to_digits(heard) if m.slots.get("age")
+                           else heard).rstrip(" .!"))
+        facts = memory.facts()
         old = None
-        if key:
-            low = key.group(1).lower()
-            old = next((i for i, t in memory.facts() if t.lower().startswith(low)), None)
+        # a newer word for the same thing replaces the old one: "моего друга зовут …", "моя любимая еда …", "мне 17 лет";
+        # "теперь друга зовут Миша" said without "моего" (told so, the model said "обновляю" and kept the old one)
+        who = m.slots.get("who", "")
+        if who and m.slots.get("name"):
+            stem = normalize_low(who).split()[-1][:4]
+            old = next((i for i, t in facts if re.search(r"(?<!\w)%s\w*\s+(?:зовут|звать)" % re.escape(stem), t, re.I)), None)
+            if old is not None:
+                fact = re.sub(r"((?:зовут|звать)\s+).+$", lambda x: x.group(1) + m.slots["name"].strip(" .!"),
+                              dict(facts)[old])
+        elif m.slots.get("value"):
+            stem = normalize_low(m.slots.get("what", "")).split()[-1][:4] if m.slots.get("what") else ""
+            old = next((i for i, t in facts if stem and re.search(r"любим\w*\s+%s" % re.escape(stem), t, re.I)), None)
+            if old is not None and not fact.lower().startswith("мо"):
+                fact = re.sub(r"^(?:мой|моя|мое|моё|мои)?\s*", "", dict(facts)[old], flags=re.I)
+                fact = _cap(re.sub(r"(любим\w*\s+\w+)\s+(?:это\s+|—\s*)?.+$", lambda x: "%s — %s" % (x.group(1), m.slots["value"].strip(" .!")),
+                                   dict(facts)[old]))
+        elif m.slots.get("age"):
+            old = next((i for i, t in facts if re.match(r"мне\s+\d+\s+(?:лет|год)", t, re.I)), None)
         if old is not None:
             memory.update_fact(old, fact)
         else:
@@ -1240,7 +1298,7 @@ class Skills:
             if re.search(r"(?<!\w)сколько(?!\w)", t, re.I) and _just_listing(re.sub(r"(?i)сколько", " ", t)):
                 return self._count(t, *span)
             if _just_listing(t):
-                return _say(self.planner.plans(t))
+                return _say(self.planner.plans(t, spoken=True))
             return self._plan_answer(t, *span) or Context("из планировщика: " + self.planner.about(t, *span))
         if DURATION.search(t):  # "сколько длится ЕГЭ?": the one in the plans, if there is one
             answer = self._duration(t, today)
@@ -1333,22 +1391,30 @@ class Skills:
                      if re.search(r"(?<!\w)%s" % key, low)), None)
         items = self.planner.planner.items(day, day)
         events = [i for i in items if i.get("start_time") and not i["done"]]
+
+        def minutes(t):
+            h, mm = map(int, t.split(":"))
+            return h * 60 + mm
+        # "я свободен завтра в три?": that hour, not the whole day (15:00 got "Нет" for the physics at 12)
+        _, at = self.planner._named(to_digits(when), heard=False) if _has_time(when) else (None, None)
+        if at and minutes(at) < 8 * 60 and not re.search(r"утр|ноч", when, re.I):
+            at = "%02d:%s" % (int(at[:2]) + 12, at[3:])  # "в три": 15:00, as the day is asked about
+        if at:
+            lo_m, hi_m = minutes(at), minutes(at) + 60
+            part = ("в %s" % at, lo_m / 60, hi_m / 60)
         if part:
             _, lo, hi = part
-
-            def minutes(t):
-                h, mm = map(int, t.split(":"))
-                return h * 60 + mm
             busy = [i for i in events if minutes(i["start_time"]) < hi * 60 and
                     minutes(i.get("end_time") or i["start_time"]) + (0 if i.get("end_time") else 60) > lo * 60]
         else:
             busy = events
         self.planner.focus = busy
         when_said = self._when(day, day, today) + (" " + part[0] if part else "")
+        asked_busy = re.search(r"(?<!\w)занят", self.heard, re.I) is not None  # "занят ли я": the other way round
         if busy:
-            return "Нет, %s: %s." % (when_said, "; ".join(spoken_item(i) for i in busy))
+            return "%s, %s: %s." % ("Да" if asked_busy else "Нет", when_said, "; ".join(spoken_item(i) for i in busy))
         tasks = [i for i in items if i["kind"] == "task" and not i["done"]]
-        answer = "Да, %s ничего не запланировано." % when_said
+        answer = "%s, %s ничего не запланировано." % ("Нет" if asked_busy else "Да", when_said)
         if tasks:
             answer += " Из задач на день: %s." % "; ".join("«%s»" % i["title"] for i in tasks)
         return answer
@@ -1388,7 +1454,13 @@ class Skills:
         if m.template.startswith("запиши") and not (_has_day(what) or _has_time(what)):
             return None
         what = re.sub(r"^(?:что|чтобы)\s+", "", what, flags=re.I)
-        if m.template.startswith(("(добавь|", "(можешь", "(добавишь")) and not (_has_day(what) or _has_time(what)) \
+        if m.template.startswith(("[мне] (надо|", "не (забудь|")) and re.search(
+                r"(?<!\w)(?:было|вчера|позавчера|прошл\w*)(?!\w)", self.heard, re.I):
+            return None  # "мне надо было вчера в 5 позвонить": regret, not a plan
+        if m.template.startswith(("[мне] (надо|", "не (забудь|")) and not (_has_day(what) or _has_time(what)) \
+                and not DUTY.match(re.sub(r"^(?:не\s+забыть|мне|что|надо|нужно)\s+", "", what.strip(), flags=re.I)):
+            return None  # "мне надо отдохнуть", "надо подумать": said, not a task
+        if m.template.startswith(("(добавь|", "(можешь", "(добавишь", "{what} (добавь|")) and not (_has_day(what) or _has_time(what)) \
                 and not PLAN_MARKED.search(self.heard) and not PLAN_LIKE.search(what) \
                 and not re.search(r"(?<!\w)(?:запланируй|запланировать|назначь|забронируй)(?!\w)", self.heard, re.I):
             # "добавь сахар в чай", "поставь чайник", "добавь громкости" (each became a task for today): the
@@ -1400,6 +1472,10 @@ class Skills:
         what = " ".join(SPOKEN_FILLERS.sub(" ", what).split()).strip(" ,:;")
         if not re.search(r"\w", what):
             return None
+        # "через час и пятнадцать минут": 75 minutes (it was an hour, and «И 15 минут выпить воду»)
+        hour_and = r"через\s+(?:1\s+|один\s+)?час\s+и\s+(\d+)\s+минут\w*"
+        if re.search(hour_and, to_digits(what), re.I):
+            what = re.sub(hour_and, lambda x: "через %d минут" % (60 + int(x.group(1))), to_digits(what), flags=re.I)
         # "напомни завтра утром сдать долг": a time of day, not a word of the title (it became «Утром сдать долг»)
         if not _has_time(what):
             what = PART_OF_DAY.sub(lambda p: " в %s " % PART_TIME[p.group(1).lower()[:3]], what, count=1).strip()
@@ -1566,6 +1642,7 @@ class Skills:
         if self.planner is None:
             return None
         what = _strip(re.sub(r"\W+(отметь|вычеркни|отмечай)\b.*$", "", m.slots.get("what", ""), flags=re.I))
+        what = re.sub(r"^(?:с|со)\s+", "", what, flags=re.I)  # "с рефератом закончил"
         item, problem = self.planner._find(what, strict=True)
         if item and not item["done"] and (re.search(r"\bотмет|вычеркн", self.heard, re.I) or
                                           abs((date.fromisoformat(item["date"]) - now.date()).days) <= 7):
@@ -1727,12 +1804,37 @@ class Skills:
                                     "Вернул время «%s»." % item["title"])[1])
         return _say(answer)
 
+    def _fixable(self):
+        """One item added or moved in the last three turns, with nothing else talked of since (the model's turns
+        in between were such corrections, not taken)."""
+        planner = self.planner
+        return planner is not None and len(planner.focus) == 1 and 0 < planner.turn - planner.last_write <= 3 \
+            and self.side_turn < planner.last_write
+
+    def _correction(self, text):
+        """"Не в 12, а в 14", "блин, не в три, в четыре", "ой, в три", "не, на четверг", "нет, в час" soon after
+        adding or moving one item: it goes there. Such bits went to the model, which said "переношу на 15:00"
+        four times over and moved nothing."""
+        planner = self.planner
+        if not self._fixable():
+            return None
+        fixed = CORRECTION.match(text)
+        rest = text[fixed.end():].strip(" .!?,") if fixed else ""
+        if not fixed or not fixed.group(0).strip() or not when_only(rest):
+            return None
+        rest = re.sub(r"^(в|к)\s+час(?:\s+дня)?$", r"\1 13:00", rest, flags=re.I)  # "в час": 13:00, as said of the day
+        self.handled = "plan_fix"
+        before = planner.focus[0]
+        answer = planner.move_item(before, rest)
+        self._undo_move(before, answer)
+        return _say(answer)
+
     def do_plan_fix(self, m, now):
         """"нет, лучше на 15" right after adding or moving: that item goes there instead. Only a day and a time:
         "в пятницу в 8 вечера иду на концерт" said right after adding is a plan of its own (it moved the
         item added before to Friday)."""
         planner = self.planner
-        if planner is None or planner.last_write != planner.turn - 1 or len(planner.focus) != 1:
+        if not self._fixable():
             return None
         if not when_only(m.slots.get("to", "")):
             return None
@@ -1852,6 +1954,8 @@ class Skills:
             return self.undo_stack.pop()()
         if self.planner is not None and self.planner.deleted:  # deleted by the model's own tool
             return _say(self.planner.restore())
+        if DISMISS.search(self.heard):
+            return "Хорошо."  # "не надо" with nothing to undo: no more than that
         return "Возвращать нечего: я ничего не менял."
 
     # ---------------------------------------------------------------------------------- talk
@@ -1922,6 +2026,10 @@ class Skills:
         return "Хорошо, не слушаю. Чтобы я снова слушал, нажми «Слушать снова» или «Говорить»."
 
     def do_ack(self, m, now):
+        if re.search(r"спасибо|благодар", self.heard, re.I):  # "ладно, спасибо": "спасибо" went as a filler
+            return self.do_thanks(m, now)
+        if DISMISS.search(self.heard):  # "ладно, забей": whatever was asked, dropped
+            return "Хорошо."
         if self.brain.last_reply.rstrip().endswith("?"):
             return None  # the model asked something: "да"/"нет" is its answer, the model's to take
         # "нет" to "Скажи, за какой день удалить всё": silence sounded like nothing was heard

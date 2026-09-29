@@ -24,19 +24,75 @@ private val ASSISTANT_AUDIO: AudioAttributes = AudioAttributes.Builder()
  * Music or a video playing on the phone is paused while Orpheus listens, thinks and talks, and goes on
  * afterwards: the transient audio focus voice assistants take (the players pause on losing it).
  */
-class MusicPause(context: Context) {
+class MusicPause(context: Context, private val ourSound: () -> Boolean) {
     private val audio = context.getSystemService(AudioManager::class.java)
+    private val main = Handler(Looper.getMainLooper())
     private val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
         .setAudioAttributes(ASSISTANT_AUDIO)
-        .setOnAudioFocusChangeListener { }
+        .setAcceptsDelayedFocusGain(true)
+        .setOnAudioFocusChangeListener(::onFocusChange, main)
         .build()
+    /** Wanted: a conversation is going on. Granted: the system gave the focus (it may refuse, or take it back). */
     private var held = false
+    private var granted = false
+    /** Music was playing when the conversation began: only then may it be paused by a key, and played again. */
+    private var musicWas = false
+    private var pausedByKey = false
 
     fun hold(on: Boolean) {
         if (on == held) return
         held = on
-        if (on) audio.requestAudioFocus(request) else audio.abandonAudioFocusRequest(request)
+        main.removeCallbacks(check)
+        if (on) {
+            musicWas = audio.isMusicActive  // before our beep: the owner's music, not us
+            take()
+            // a player that keeps on after losing the focus (it happened: the music played while Orpheus listened)
+            main.postDelayed(check, 500)
+            main.postDelayed(check, 1_500)
+        } else {
+            granted = false
+            audio.abandonAudioFocusRequest(request)
+            if (pausedByKey) key(android.view.KeyEvent.KEYCODE_MEDIA_PLAY)
+            pausedByKey = false
+            musicWas = false
+        }
     }
+
+    /** Called while the conversation goes on (the ticks): the focus asked for again if it was refused or taken,
+     *  and music still heard (only while Orpheus itself is silent: its own beeps and replies are "music" too)
+     *  paused by the media key - and played again afterwards, as it was playing before. */
+    fun keep() {
+        if (!held) return
+        if (!granted && !inCall()) take()
+        if (musicWas && !pausedByKey && !ourSound() && audio.isMusicActive) pauseByKey()
+    }
+
+    private val check = Runnable { keep() }
+
+    private fun take() {
+        granted = audio.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+    }
+
+    private fun onFocusChange(change: Int) {
+        when (change) {
+            AudioManager.AUDIOFOCUS_GAIN -> granted = true
+            // another app took it (a player resuming by itself): asked for again on the next tick, unless a call
+            AudioManager.AUDIOFOCUS_LOSS, AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> granted = false
+        }
+    }
+
+    private fun pauseByKey() {
+        pausedByKey = true
+        key(android.view.KeyEvent.KEYCODE_MEDIA_PAUSE)
+    }
+
+    private fun key(code: Int) {
+        audio.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, code))
+        audio.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, code))
+    }
+
+    private fun inCall() = audio.mode == AudioManager.MODE_IN_CALL || audio.mode == AudioManager.MODE_RINGTONE
 }
 
 /**
@@ -126,11 +182,22 @@ class Player(private val onFinished: (Event.ReplyDone) -> Unit) {
     }
 }
 
-/** Short tones instead of sound files: rising means "I'm listening", falling means "got it". */
+/** Until when Orpheus's own short sounds play (beeps, a reminder): to the system they are "music" too. */
+object OwnSound {
+    @Volatile var until = 0L
+
+    fun playing(ms: Long) {
+        until = maxOf(until, android.os.SystemClock.uptimeMillis() + ms + 100)
+    }
+
+    val busy get() = android.os.SystemClock.uptimeMillis() < until
+}
+
 /** A whole utterance played at once (a reminder the server said by itself), on the same stream as the replies. */
 object Announcer {
     fun play(pcm: ByteArray, rate: Int, onDone: () -> Unit) {
         if (pcm.size < 2) return onDone()
+        OwnSound.playing(pcm.size / 2 * 1000L / rate)
         val track = AudioTrack.Builder()
             .setAudioAttributes(ASSISTANT_AUDIO)
             .setAudioFormat(
@@ -149,6 +216,7 @@ object Announcer {
     }
 }
 
+/** Short tones instead of sound files: rising means "I'm listening", falling means "got it". */
 object Earcons {
     private const val RATE = 22_050
 
@@ -177,6 +245,7 @@ object Earcons {
 
     fun play(earcon: Earcon) {
         val pcm = sounds.getValue(earcon)
+        OwnSound.playing(pcm.size * 1000L / RATE)
         val track = AudioTrack.Builder()
             .setAudioAttributes(ASSISTANT_AUDIO)
             .setAudioFormat(

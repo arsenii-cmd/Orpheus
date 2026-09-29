@@ -285,7 +285,7 @@ class PlannerTools:
         return [i for i in self.planner.items(first, last)
                 if any(st in (i["title"] + " " + i["body"]).lower().replace("ё", "е") for st in stems)]
 
-    def plans(self, when):
+    def plans(self, when, spoken=False):
         if re.search(r"заметк", when or "", re.I):
             notes = self.notes_list()
             if not notes:
@@ -294,13 +294,20 @@ class PlannerTools:
         span = period(when, self.today())
         if span is None:
             return "уточни: не понял, какой день — «%s»" % when
-        return self.listing(*span)
+        return self.listing(*span, spoken=spoken)
 
-    def listing(self, first, last):
+    def listing(self, first, last, spoken=False):
         today = self.today()
         items = self.planner.items(first, last)
         self.focus = self.listed = items
         self.listed_turn = self.turn
+        if spoken and first != last and len(items) > SPOKEN_MAX:
+            # "что у меня на этой неделе" read out ~1500 characters: the count, the nearest, and how to ask on
+            ahead = [i for i in items if not i["done"] and i["date"] >= today.isoformat()][:3]
+            days = len({i["date"] for i in items})
+            near = "; ".join("%s — %s" % (spoken_day(date.fromisoformat(i["date"]), today), spoken_item(i)) for i in ahead)
+            return "%d %s за %d %s. Ближайшее: %s. Про любой день спроси отдельно" % (
+                len(items), plural(len(items), "запись", "записи", "записей"), days, plural(days, "день", "дня", "дней"), near)
         if first == last:
             if not items:
                 return "%s: в планах ничего нет" % spoken_day(first, today)
@@ -386,6 +393,10 @@ class PlannerTools:
         default = span[0] if span and span[0] == span[1] and span[0] != self.today() else None
         item = self.planner.quick(text, default)
         title = tidy_title(item["title"])
+        if len(re.sub(r"\W", "", title)) < 2:
+            # "напомни через 20 минут" with nothing to remind of made an event «В»
+            self.planner.delete(item["id"])
+            return "уточни, о чём напомнить или что добавить"
         if title != item["title"]:
             item = dict(item, title=title)
             item.pop("updated_at", None)
@@ -958,12 +969,23 @@ def time_span(text):
     return "%02d:%02d" % (h1, m1), "%02d:%02d" % (h2 % 24, m2)
 
 
+SPOKEN_MAX = 12  # more items than this over several days are summed up when said aloud
+
+
 def tidy_title(title):
     """"В стоматолога" -> "Стоматолог", "к врачу" -> "Врач", "Встречу" -> "Встреча": what is left of
     "запланируй на 3 октября в 15:30 стоматолога", "запиши меня к врачу на среду" or "добавь встречу"
     once the day and time are cut out (and "на" of "на среду" left hanging at the end)."""
-    # "завтра в 10 у меня стоматолог", "у меня в четверг репетитор" («В репетитор»): "у меня" first
-    t = re.sub(r"^у\s+(?:меня|нас)\s+(?=\S)", "", title.strip(), flags=re.I)
+    t = title.strip()
+    # what is left of the spoken start once the day and time are cut out: "ну короче у меня в субботу в 10 пробное
+    # собеседование запиши" was «Ну у меня в пробное собеседование запиши», "слушай во вторник в 15:30 у меня
+    # стоматолог" «Слушай в у меня стоматолог», "напомни в следующий понедельник про кр" «Следующий про кр»
+    for _ in range(3):
+        t = re.sub(r"^(?:(?:ну|слушай|короче|кстати|вот|блин|ладно|так|тогда|и|а|ещё|еще|также|тоже|следующ\w*|ближайш\w*|"
+                   r"в|во|на|к|ко|про|о|об)\s+)+(?=\S)", "", t, flags=re.I)
+        # "завтра в 10 у меня стоматолог", "у меня в четверг репетитор" («В репетитор»)
+        t = re.sub(r"^у\s+(?:меня|нас)\s+(?=\S)", "", t, flags=re.I)
+    t = re.sub(r"(?:\s+(?:запиши|записать|добавь|добавить|поставь|запланируй|внеси|отметь|пожалуйста|плиз))+$", "", t, flags=re.I)
     # "в пятницу иду на концерт": the event, not the going
     t = re.sub(r"^(?:я\s+)?(?:иду|пойду|идем|идём|пойдем|пойдём|еду|поеду|едем|поедем|схожу|сходим|собираюсь|собираемся)"
                r"(?:\s+(?:на|в|во|к|ко))?\s+(?=\S)", "", t, flags=re.I)
