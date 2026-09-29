@@ -673,3 +673,14 @@ def test_the_weather_city_goes_on_and_there_is_it():
     assert "в Казани" in say(brain, "нужен ли зонт")
     assert "в Казани" in say(brain, "а ветер сильный")
     assert say(brain, "в Казани сегодня сколько градусов") == "Сейчас в Казани +13."
+
+
+def test_degrees_then_another_day_or_city_or_home_is_the_forecast():
+    # the fifth talk: after "в Питере сегодня сколько градусов", "а завтра", "а в Твери", "а дома" were the model's
+    # made-up numbers ("+15", "+18", "дома +13")
+    brain = make(replies=[text("Ясно.")] * 3)
+    assert say(brain, "в Казани сегодня сколько градусов") == "Сейчас в Казани +13."
+    assert say(brain, "а завтра").startswith("Завтра в Казани от")
+    assert say(brain, "как там в Казани").startswith("Сейчас в Казани")
+    assert say(brain, "как погода в Казани").startswith("Сейчас в Казани")
+    assert say(brain, "в Казани сейчас холодно") == "Сейчас в Казани +13."

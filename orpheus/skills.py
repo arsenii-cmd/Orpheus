@@ -586,6 +586,8 @@ class Skills:
         # "а завтра?" right after "какая погода в Казани?": the same question about another day
         # (not "а что у меня в среду?": a question of its own)
         text = self._there(text)  # "а сегодня там", "а там дождь будет": the city of the last weather question
+        if not last and self.last_weather and self.turn - self.last_weather[0] <= 3:
+            last = self.last_weather[1:]  # "а в Твери" after a turn the model answered, the weather talked of before
         follow = self._follow_up(last, text) if last and self._specific(text) is None else None
         if follow:
             result = self._dispatch(follow, now)
@@ -744,6 +746,15 @@ class Skills:
         if intent == "date_of" and re.fullmatch(r"(?:в|на)?\s*следующ\w*(?:\s+\w+)?", low) and self.last_day:
             d = self.last_day + timedelta(days=7)  # "какое число в пятницу?" - "а в следующую?"
             return "какое число будет %d.%02d.%d" % (d.day, d.month, d.year)
+        if intent in WEATHER_ALL and re.fullmatch(r"(?:а\s+)?(?:дома|у\s+нас|у\s+меня|здесь|тут)", low):
+            # "а дома": the same question about home (the model said "дома +13", Petersburg's number)
+            base = to_digits(prev)
+            old = _city(base)
+            return " ".join((base.replace(old.group(0), " ") if old else base).split()) if old else None
+        if intent == "weather_degrees" and (DAY_EXPR.search(to_digits(frag)) or _city(to_digits(frag))):
+            # "в Питере сколько градусов" - "а завтра", "а в Твери": the forecast's (the model made up "+15", "+18")
+            prev = "какая погода " + (_city(to_digits(prev)).group(0) if _city(to_digits(prev)) else "")
+            intent = "weather"
         f = to_digits(frag)
         day = DAY_EXPR.search(f)
         city = _city(f) if intent in WEATHER else None
@@ -779,6 +790,8 @@ class Skills:
             return text
         if len(re.findall(r"\w+", text)) > 4 and not WEATHER_WORDS.search(text):
             return text  # "что там у меня завтра": the plans' "там", not a city's
+        if _city(to_digits(text)):
+            return text  # "как там в Сочи": the city is named (it became "как в Питере в Сочи")
         city = _city(to_digits(self.last_weather[2]))
         return re.sub(r"(?<!\w)там(?!\w)", city.group(0), text, count=1, flags=re.I) if city else text
 
@@ -823,7 +836,7 @@ class Skills:
 
     def do_time_until(self, m, now):
         """"Сколько времени осталось до полуночи?", "…до 18:00": the hours and minutes left (the model: 10 s)."""
-        when = m.slots.get("when", "")
+        when = m.slots.get("when", "") or ("конца " + m.slots["end"] if m.slots.get("end") else "")
         if re.search(r"полуноч|полноч|конца\s+(?:дня|суток)", when, re.I):
             target, name = datetime.combine(now.date() + timedelta(days=1), datetime.min.time()), "полуночи"
         else:
@@ -856,6 +869,35 @@ class Skills:
         if (minutes or not (hours or days)) and not days:
             left.append("%d %s" % (minutes, plural(minutes, "минута", "минуты", "минут")))
         return "До %s осталось %s." % (name, " ".join(left))
+
+    def do_plan_end(self, m, now):
+        """"Когда закончится хакатон?": the end in the plans (plan_ask said its start)."""
+        if self.planner is None:
+            return None
+        item, _ = self.planner._find(m.slots.get("what", ""), strict=True)
+        if item is None:
+            return None
+        item = self.planner.next_of(item)
+        day = spoken_day(date.fromisoformat(item["date"]), now.date())
+        if item.get("end_time"):
+            return "«%s» заканчивается %s в %s." % (item["title"], day, item["end_time"])
+        at = " начинается в %s," % item["start_time"] if item.get("start_time") else ""
+        return "«%s»%s %s; конец в планах не указан." % (item["title"], at, day)
+
+    def do_age(self, m, now):
+        """"Сколько мне лет, если я родился в 2008?" - the model said 16. "Я 2008 года рождения" is kept too."""
+        year = int(re.sub(r"\D", "", to_digits(m.slots.get("year", ""))) or 0)
+        if not 1900 < year <= now.year:
+            return None
+        age = now.year - year
+        birthday = self._birthday(now.date())
+        if m.template.startswith("я {year}"):
+            memory = self.brain.active
+            memory.remember("Я родился в %d году" % year)
+            self.brain.refresh_facts()
+        if birthday is not None:  # the day is known: exact
+            return "Тебе %d." % (age if birthday.year > now.year or birthday == now.date() else age - 1 if birthday > now.date() else age)
+        return "Тебе %d, если день рождения в этом году уже был, иначе %d." % (age, age - 1)
 
     def do_date(self, m, now):
         return "Сегодня %s." % _day_text(now.date())
@@ -1177,19 +1219,45 @@ class Skills:
         words = re.findall(r"\w+", m.slots.get("what", "") or m.slots.get("name", "") or m.slots.get("where", "") or "x")
         if len(words) > 6:
             return None
-        if m.template.startswith("(мой|моя) [лучший") and (len(words) > 2 or re.search(r"(?:л|ла|ет|ит|ут|ят)$", words[-1], re.I)):
+        if "(мой|моя) [лучший" in m.template and (len(words) > 2 or re.search(r"(?:л|ла|ли|ет|ит|ут|ят)$", words[-1], re.I)):
             return None  # "мой друг сказал …", "моя подруга уехала": about them, not their name
         if m.slots.get("age") and not re.fullmatch(r"\d{1,3}", to_digits(m.slots["age"]).strip()):
             return None  # "мне сто лет в обед" is no age
         memory = self.brain.active
-        fact = _cap(re.sub(r"^\W*(?:(?:ну|слушай|кстати|короче|вот|а|теперь)\W+)*", "", to_digits(heard) if m.slots.get("age")
-                           else heard).rstrip(" .!"))
         facts = memory.facts()
+        stop = re.search(r"(?<!\w)больше\s+не\s+(\w+)\s+(.+)$", heard, re.I)
+        if stop:
+            # "я больше не играю на гитаре": the fact goes (the model said "понял, ты перестал" and kept it)
+            verb, obj = stop.group(1)[:4].lower(), _stems(stop.group(2))
+            gone = [(i, t) for i, t in facts if verb in t.lower() and (not obj or any(o in t.lower() for o in obj))]
+            if not gone:
+                return "Этого я о тебе и не помнил."
+            for i, _ in gone:
+                memory.forget(i)
+            self.brain.refresh_facts()
+            return "Понял, убрал из памяти."
+        fact = _cap(re.sub(r"^\W*(?:(?:ну|слушай|кстати|короче|вот|а|теперь|поправка)\W+)*", "", to_digits(heard) if m.slots.get("age")
+                           else heard).rstrip(" .!"))
+        fact = re.sub(r"(?<!\w)теперь\s+", "", fact, flags=re.I)
+        if m.slots.get("old"):  # "лучший друг у меня не Егор а Костя"
+            fact = "Мой лучший друг %s" % m.slots["name"].strip(" .!")
         old = None
+        friend = re.match(r"(?i)(мой|моя)\s+(?:лучш\w+\s+)?(друг|подруга|парень|девушка)(?!\w)", fact)
+        verb = re.match(r"(?i)я\s+(\w+)", fact)
+        if friend:
+            # "теперь мой лучший друг Егор": replaces the friend saved before
+            kind = friend.group(2).lower()[:4]
+            old = next((i for i, t in facts if re.match(r"(?i)(мой|моя)\s+(?:лучш\w+\s+)?%s" % kind, t)), None)
+        elif verb and re.search(r"(?<!\w)теперь(?!\w)", heard, re.I):
+            # "я теперь играю на барабанах": the same verb's fact before ("я играю на гитаре") replaced
+            stem = verb.group(1).lower()[:4]
+            old = next((i for i, t in facts if re.match(r"(?i)я\s+%s" % re.escape(stem), t)), None)
         # a newer word for the same thing replaces the old one: "моего друга зовут …", "моя любимая еда …", "мне 17 лет";
         # "теперь друга зовут Миша" said without "моего" (told so, the model said "обновляю" and kept the old one)
         who = m.slots.get("who", "")
-        if who and m.slots.get("name"):
+        if old is not None:
+            pass
+        elif who and m.slots.get("name"):
             stem = normalize_low(who).split()[-1][:4]
             old = next((i for i, t in facts if re.search(r"(?<!\w)%s\w*\s+(?:зовут|звать)" % re.escape(stem), t, re.I)), None)
             if old is not None:
@@ -1229,7 +1297,7 @@ class Skills:
         self.brain.refresh_facts()
         self._can_undo(lambda: (memory.remember(text), self.brain.refresh_facts(),
                                 "Вернул в память: %s." % text.rstrip("."))[2])
-        return "Забыл: %s." % text.rstrip(".")
+        return "Забыл: %s." % (text[:1].lower() + text[1:]).rstrip(".")
 
     def do_about_me(self, m, now):
         """"Что ты обо мне знаешь?" - the facts themselves, for the model to retell and add nothing to:
@@ -1891,7 +1959,17 @@ class Skills:
                 loose = m.slots.get("span") or no_verb or m.template.startswith(("[давай] {what}", "(перекинь|", "[а|и] {what}"))
                 return None if loose else _say(problem)
         planner = self.planner
-        answer = planner.move_item(item, to, whole=whole)
+        by_days = re.fullmatch(r"\s*(?:на\s+)?(?:(\d+)\s+)?(день|дня|дней|сутки|суток|неделю|недели|недель)\s*", to_digits(to), re.I)
+        if by_days:
+            # "отложи хакатон на 2 дня", "отложи ЕГЭ на неделю": the day moves ("на 2" was read as 14:00)
+            n = int(by_days.group(1) or 1) * (7 if by_days.group(2).lower().startswith("недел") else 1)
+            new = date.fromisoformat(item["date"]) + timedelta(days=n)
+            moved = {k: v for k, v in dict(item, date=new.isoformat()).items() if k != "updated_at"}
+            planner.planner.save(moved)  # the date itself: "на 3 октября" was read as 03:00
+            planner.focus, planner.last_write = [moved], planner.turn
+            answer = "Перенёс на %s: %s." % (spoken_day(new, planner.today(), acc=True), spoken_item(moved))
+        else:
+            answer = planner.move_item(item, to, whole=whole)
         self._undo_move(item, answer)
         if planner.replaced and answer.startswith("Перенёс") and "все повторы" in answer:
             before = list(planner.replaced)
@@ -2002,6 +2080,9 @@ class Skills:
         # "удали всё на сегодня кроме русского": the exception was ignored, and the Russian lesson deleted too
         but = re.split(r"\s*,?\s*(?:кроме|за\s+исключением|но\s+не|только\s+не)\s+", what, maxsplit=1, flags=re.I)
         what, keep = but[0], (but[1] if len(but) > 1 else "")
+        day_in_keep = DAY_EXPR.search(to_digits(keep)) if keep and not _has_day(what) else None
+        if day_in_keep:  # "удали всё кроме физики на сегодня": the day came after the exception
+            what, keep = what + " " + day_in_keep.group(0), to_digits(keep).replace(day_in_keep.group(0), " ")
         span = period(what, today) if _has_day(what) else None
         if span is None:
             series = self._series_named(what)
@@ -2261,6 +2342,8 @@ class Skills:
         return self._weather_ask(m, now, answer)
 
     def do_weather_degrees(self, m, now):
+        if m.template.startswith(("[а] (в|во) {rest}", "[а] {rest} сколько")) and len(m.slots.get("rest", "").split()) > 3:
+            return None  # "стоит ли в субботу ехать за город, будет тепло?": no city before "тепло"
         return self._weather_ask(m, now, lambda place, first, last, said_day:
                                  self.weather.day_text(place, first) if said_day and first != now.date()
                                  else self.weather.degrees(place))

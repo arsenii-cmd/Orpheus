@@ -238,7 +238,7 @@ def test_remember_forget_and_bring_back():
     assert say(brain, "Запомни, что я люблю кофе без сахара.") == "Запомнил."
     assert say(brain, "Запомни: мою сестру зовут Аня.") == "Запомнил."
     assert brain.memory.facts() == [(1, "Я люблю кофе без сахара"), (2, "Мою сестру зовут Аня")]
-    assert say(brain, "Забудь, что я люблю кофе.") == "Забыл: Я люблю кофе без сахара."
+    assert say(brain, "Забудь, что я люблю кофе.") == "Забыл: я люблю кофе без сахара."
     assert brain.memory.facts() == [(2, "Мою сестру зовут Аня")]
     assert say(brain, "Верни как было.") == "Вернул в память: Я люблю кофе без сахара."
     assert say(brain, "Забудь про самолёты.") == "Такого я не помню."
@@ -787,7 +787,7 @@ def test_two_answers_to_one_phrase_do_not_say_the_same_twice():
 def test_when_it_ends_and_the_next_one_are_found_in_the_plans():
     brain = make(*WEEK, {"id": "t0", "kind": "event", "title": "Тренировка", "date": "2026-09-21", "start_time": "19:00"},
                  {"id": "t2", "kind": "event", "title": "Тренировка", "date": "2026-10-05", "start_time": "19:00"})
-    assert say(brain, "Во сколько заканчивается Хакатон?") == "Завтра, суббота, 26 сентября — с 10:00 до 13:00 Хакатон."
+    assert say(brain, "Во сколько заканчивается Хакатон?") == "«Хакатон» заканчивается завтра, суббота, 26 сентября в 13:00."
     assert say(brain, "Когда у меня следующая тренировка?") == "Понедельник, 28 сентября — с 19:00 до 20:30 Тренировка."
     assert brain.llm.requests == []
 
@@ -1357,3 +1357,37 @@ def test_what_the_fourth_talk_showed_about_facts():
         assert say(brain, said) == "Запомнил.", said
     assert say(brain, "мой друг уехал") == "Ясно."
     assert len(brain.memory.facts()) == 6
+
+
+def test_what_one_tells_changes_the_memory():
+    # the fifth talk: "теперь мой лучший друг Егор", "я больше не играю на гитаре" -> "Понял…" from the model, the old kept
+    brain = make(replies=[text("Ясно.")] * 3)
+    for said in ["мой лучший друг Артём", "теперь мой лучший друг Егор", "поправка лучший друг у меня не Егор а Костя",
+                 "я играю на гитаре", "я теперь играю на барабанах", "у меня есть кот"]:
+        assert say(brain, said) == "Запомнил.", said
+    assert [t for _, t in brain.memory.facts()] == ["Мой лучший друг Костя", "Я играю на барабанах", "У меня есть кот"]
+    assert say(brain, "я больше не играю на барабанах") == "Понял, убрал из памяти."
+    assert say(brain, "мой друг уехал") == "Ясно."
+    assert [t for _, t in brain.memory.facts()] == ["Мой лучший друг Костя", "У меня есть кот"]
+
+
+def test_the_end_of_a_plan_and_an_age_are_the_programs():
+    # the fifth talk: "до ЕГЭ сколько" -> "через 2 года и 6 месяцев", "через сколько закончится физика" -> "через 5 дней",
+    # "сколько мне лет, если я родился в 2008" -> "16" (all the model's)
+    brain = make(*WEEK)
+    assert say(brain, "до ЕГЭ сколько") == "До «ЕГЭ» осталось 1 день 7 часов."
+    assert say(brain, "через сколько закончится хакатон") == "До конца «Хакатон» осталось 22 часа 57 минут."
+    assert say(brain, "когда закончится хакатон") == "«Хакатон» заканчивается завтра, суббота, 26 сентября в 13:00."
+    assert say(brain, "сколько мне лет если я родился в 2008") == "Тебе 18, если день рождения в этом году уже был, иначе 17."
+
+
+def test_lets_add_postpone_by_days_and_titles_from_speech():
+    # the fifth talk: "давай добавим контрольную по химии в среду" -> "Этого я не сделал"; "отложи ЕГЭ на неделю" -> the
+    # model; titles «Давай запишем химию», «Там купить билеты», «Контрольную»
+    from orpheus.planner import tidy_title
+    brain = make(*WEEK)
+    assert say(brain, "давай добавим контрольную по химии в среду").startswith("Добавил")
+    assert say(brain, "отложи ЕГЭ на неделю").startswith("Перенёс на субботу, 3 октября")
+    assert say(brain, "отложи хакатон на 2 дня").startswith("Перенёс на понедельник, 28 сентября")
+    assert [tidy_title(t) for t in ("Давай запишем химию", "Там купить билеты", "Контрольную")] == [
+        "Химия", "Купить билеты", "Контрольная"]
