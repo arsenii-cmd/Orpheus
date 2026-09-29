@@ -1,5 +1,7 @@
 # Установка Ubuntu Server на ноутбук Орфея
 
+**Русский** · [English](install-ubuntu-server.en.md)
+
 Это ручной путь. Есть автоматический: флешка, которая ставит систему сразу с Орфеем —
 [usb.md](usb.md).
 
@@ -44,14 +46,14 @@ sudo dd if=ubuntu-24.04*-live-server-amd64.iso of=/dev/sdX bs=4M status=progress
 | Storage | Use an entire disk. **Подвох:** по умолчанию раздел `ubuntu-lv` получает не весь диск. На экране Storage configuration выбери `ubuntu-lv` → Edit → максимальный Size. Либо сними галку «Set up this disk as an LVM group» |
 | Profile | Имя, hostname `orpheus`, логин, пароль |
 | Ubuntu Pro | Skip |
-| SSH | **Install OpenSSH server**. «Import SSH key → from GitHub» с логином `arsenii-cmd` пустит тебя по твоему ключу без пароля |
+| SSH | **Install OpenSSH server**. «Import SSH key → from GitHub» со своим логином GitHub пустит вас по вашему ключу без пароля |
 | Featured snaps | Ничего |
 
 После «Reboot Now» вытащи флешку и нажми Enter.
 
 ## 4. Первый вход
 
-С основного ноута:
+С другого компьютера:
 
 ```sh
 ssh логин@orpheus.local     # или по IP: на самом ноуте его покажет `ip a`
@@ -83,8 +85,6 @@ sudo netplan apply
 
 ## 5. Орфей
 
-Пока код лежит в ветке, а не в `main`:
-
 ```sh
 git clone https://github.com/arsenii-cmd/Orpheus.git
 cd Orpheus
@@ -92,11 +92,6 @@ sudo scripts/laptop.sh Europe/Moscow   # ноут как сервер (см. н�
 scripts/install.sh                     # сам Орфей, модели, Ollama
 sudo reboot
 ```
-
-Если репозиторий приватный, `git clone` попросит логин, а вместо пароля нужен
-токен GitHub. Проще сделать на ноуте ключ (`ssh-keygen -t ed25519`), добавить
-`~/.ssh/id_ed25519.pub` в GitHub → Settings → SSH keys и клонировать
-`git@github.com:arsenii-cmd/Orpheus.git`.
 
 `scripts/laptop.sh` можно запускать повторно, он меняет только то, что ещё не настроено:
 

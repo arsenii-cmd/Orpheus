@@ -677,8 +677,8 @@ fun SettingsScreen(
                     GlassField(s.personalKey, { s = s.copy(personalKey = it) }, "Ключ «Личного»", "не задан", KeyboardType.Password, secret = true)
                     Hint(
                         when {
-                            !keyOk -> "Не похоже на ключ: нужны 44 символа из копии на ноутбуке"
-                            s.personalKey.isBlank() -> "Без ключа «Личное» закрыто. Копия ключа — на ноутбуке, в Keys/Privat"
+                            !keyOk -> "Не похоже на ключ: нужны 44 символа (32 байта в base64)"
+                            s.personalKey.isBlank() -> "Без ключа «Личное» закрыто"
                             else -> "Хранится в защищённом хранилище телефона и открывает личную память на сервере"
                         }
                     )
