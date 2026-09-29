@@ -573,6 +573,11 @@ class PlannerTools:
                 moved["end_time"] = "%02d:%02d" % (end // 60 % 24, end % 60) if end < 24 * 60 else None
             moved["start_time"] = time
         if (moved["date"], moved.get("start_time")) == (item["date"], item.get("start_time")):
+            if (span and span[0] == span[1]) or time:
+                # "перенеси её лучше на четверг" of a training on Thursday: asked "на какой день?" as if not heard
+                self.focus = [item]
+                return "«%s» и так %s: %s." % (item["title"], spoken_day(date.fromisoformat(item["date"]), today),
+                                              spoken_item(item))
             return "уточни, на какой день или время перенести «%s»" % item["title"]
         if item.get("series") and whole and moved["date"] == item["date"]:
             # "перенеси зарядку на 7 утра": the time of a repeat is the time of all of it (a day moved is that day only)

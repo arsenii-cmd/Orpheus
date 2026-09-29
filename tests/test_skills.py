@@ -1171,3 +1171,12 @@ def test_missed_today_reads_the_plans():
                  replies=[text("Физику в 12.")])
     say(brain, "Я сегодня что-нибудь пропустил?")
     assert brain.skills.handled == "plan_ask" and "Физика" in str(brain.llm.requests[0])  # the model sees the day
+
+
+def test_a_move_to_where_it_already_is_says_so():
+    # the speech bench on a Tuesday: "перенеси её лучше на четверг" of a training on Thursday got "на какой день?"
+    brain = make({"id": "t", "kind": "event", "title": "Тренировка", "date": "2026-10-01", "start_time": "19:00", "end_time": "20:30"})
+    reply = say(brain, "Перенеси тренировку на четверг.")
+    assert reply.startswith("«Тренировка» и так") and "четверг" in reply and "19:00" in reply
+    assert say(brain, "Перенеси тренировку на 19.").startswith("«Тренировка» и так")
+    assert say(brain, "Перенеси её на пятницу.").startswith("Перенёс на")  # "её": the one just named

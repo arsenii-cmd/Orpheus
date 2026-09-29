@@ -535,8 +535,9 @@ DIALOGS += [
         t("Удали тренировку.", "plan_delete", "?"),
         t("Да.", "confirm", "удалил"),
         t("Ой, нет, верни её.", "undo", "вернул"),
-        t("Перенеси её лучше на четверг.", "plan_move", "четверг"),
-    ], check=lambda ctx: one([i for i in items(ctx, "трениров") if bd.date.fromisoformat(i["date"]).weekday() == 3])),
+        # a day other than the training's own (+2): "на четверг" of a Thursday's training is no move at all
+        t("Перенеси её лучше на %s." % ACC_ON(4), "plan_move", ACC_ON(4).split()[0][:4]),
+    ], check=lambda ctx: one([i for i in items(ctx, "трениров") if bd.date.fromisoformat(i["date"]) == bd.d(4)])),
     Dialog("разговор", "вопросы про прошлое", [
         t("Что у меня было вчера?", "plan_ask"),
         t("Я сегодня что-нибудь пропустил?", "plan_ask|plan_left|" + MODEL),
