@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Orpheus as the digital assistant: Assistant.kt -->
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="dev.arco.orpheus.OrpheusSessionService"
+    android:recognitionService="dev.arco.orpheus.OrpheusRecognition"
+    android:settingsActivity="dev.arco.orpheus.MainActivity"
+    android:supportsAssist="true"
+    android:supportsLaunchVoiceAssistFromKeyguard="true" />

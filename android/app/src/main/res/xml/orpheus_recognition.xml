@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the recognizer an assistant must bring; it hands every request on (Assistant.kt, OrpheusRecognition) -->
+<recognition-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsActivity="dev.arco.orpheus.MainActivity" />

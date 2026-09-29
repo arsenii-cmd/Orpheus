@@ -1,0 +1,15 @@
+[Unit]
+Description=Orpheus first-boot setup (packages, models, Ollama)
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/etc/orpheus-firstboot.conf
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash @ROOT@/usb/firstboot.sh
+TimeoutStartSec=infinity
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

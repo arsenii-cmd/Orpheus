@@ -1,0 +1,31 @@
+[project]
+name = "orpheus"
+version = "0.1.0"
+description = "Orpheus: offline Russian voice assistant"
+requires-python = ">=3.11"
+dependencies = [
+    "sherpa-onnx>=1.12",
+    "numpy",
+    "soundfile",
+    "sounddevice",
+    "websockets>=13",
+    "fastembed>=0.5",
+    "cryptography>=42",
+    "vosk-tts>=0.3",  # the voice on the laptop since 27.09 (speech.py, VoskVoice)
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+orpheus = "orpheus.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["orpheus"]
+
+[tool.setuptools.package-data]
+orpheus = ["*.txt"]

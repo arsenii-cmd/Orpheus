@@ -1,0 +1,13 @@
+# The Planner's local copy for Orpheus (127.0.0.1 only); plannerd itself comes from the Planner repository
+# (~/.local/bin/plannerd). In the machine's time zone, the same one Orpheus counts its days in.
+[Unit]
+Description=Planner local copy for Orpheus (127.0.0.1 only)
+
+[Service]
+ExecStart=%h/.local/bin/plannerd serve --local-only
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target

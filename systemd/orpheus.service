@@ -1,0 +1,19 @@
+# The voice mode: this machine's own microphone. Installed by scripts/install.sh (@ROOT@ = the checkout).
+# Settings: `systemctl --user edit orpheus` (a drop-in, kept when this file is installed again), e.g.
+#   [Service]
+#   Environment=ORPHEUS_MODEL=qwen2.5-3b-abliterated
+[Unit]
+Description=Orpheus voice assistant
+# one of the two at a time: both would load the same models and share Ollama's one slot
+Conflicts=orpheus-server.service
+
+[Service]
+WorkingDirectory=@ROOT@
+ExecStart=@ROOT@/.venv/bin/python -m orpheus voice
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

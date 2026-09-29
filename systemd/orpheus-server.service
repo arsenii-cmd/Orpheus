@@ -1,0 +1,24 @@
+# The server for the phone app (WebSocket on :8765). Installed by scripts/install.sh (@ROOT@ = the checkout).
+# Settings: `systemctl --user edit orpheus-server` (a drop-in, kept when this file is installed again).
+# It listens on all interfaces: the phone comes from the home LAN and through the tunnel; the server lets in
+# only those addresses and checks the token, and scripts/firewall.sh closes the rest.
+[Unit]
+Description=Orpheus server for the phone app (WebSocket on :8765)
+# the Planner is its calendar; the voice mode on this machine is the other way to use the same models
+Wants=plannerd.service
+After=plannerd.service
+Conflicts=orpheus.service
+
+[Service]
+WorkingDirectory=@ROOT@
+# Ollama is a system service a user unit cannot be ordered after: up to a minute's wait for it at boot
+# (without it the server still starts and answers "мозг недоступен" until Ollama is up)
+ExecStartPre=/bin/sh -c 'i=0; while [ $$i -lt 60 ]; do curl -fs http://127.0.0.1:11434/api/version >/dev/null && exit 0; i=$$((i+1)); sleep 1; done; exit 0'
+ExecStart=@ROOT@/.venv/bin/python -m orpheus server
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

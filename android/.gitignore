@@ -1,0 +1,8 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+# the wake word model is downloaded by scripts/fetch_wake_model.sh
+app/src/main/assets/vosk-model/
+.kotlin/
