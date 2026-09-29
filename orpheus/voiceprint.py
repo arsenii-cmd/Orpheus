@@ -5,7 +5,7 @@ laptop's CPU) turns a phrase into a vector; the owner's voiceprint is the mean o
 a few phrases he read once in the app. A phrase is the owner's when its vector points the same way
 (cosine similarity above a threshold).
 
-Measured here (28.09) with Piper voices as "people": one voice enrolled from 5 phrases scored
+Measured here with Piper voices as "people": one voice enrolled from 5 phrases scored
 0.62–0.82 on 20 other phrases of its own (0.56 and up with noise at 10 dB), other voices 0.03–0.47,
 a real reader 0.11–0.19. The default threshold 0.5 sits in that gap; real people and the phone's
 microphone differ, so the server first runs in the "log" mode and the threshold is set from the

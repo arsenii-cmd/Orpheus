@@ -1,6 +1,6 @@
 """The only way out to the internet: weather, search and the Central Bank's exchange rates.
 
-Through the proxy in the config (ORPHEUS_PROXY: sing-box on this laptop, to the exit node) and only
+Through the proxy in the config (ORPHEUS_PROXY, e.g. a local sing-box to an exit node) and only
 through it - never around it: without the proxy the internet is "unavailable" rather than reached
 another way. Only for these requests: Ollama, the Planner and the phone never see a proxy.
 
@@ -20,8 +20,8 @@ USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Ge
 # Wikimedia asks programs to name themselves (a browser's name gets "429 Too Many Requests" sooner)
 AGENTS = {"ru.wikipedia.org": "Orpheus/0.1 (personal voice assistant; https://github.com/arsenii-cmd/Orpheus) python-urllib"}
 TIMEOUT = 8
-# now and then a request hangs through the proxy and the same one a second later takes 0.5 s (27.09:
-# Wikipedia and the Central Bank, 12 s each): a short first try, then one more
+# now and then a request hangs through the proxy and the same one a second later takes 0.5 s
+# (Wikipedia and the Central Bank, 12 s each): a short first try, then one more
 FIRST_TRY = 4
 
 

@@ -43,14 +43,14 @@ class Config:
     llm_threads: int = _from_env("LLM_THREADS", 0, int)  # 0: let Ollama decide
     think: str = _from_env("THINK", "")  # "0"/"1" only for hybrid models such as qwen3:4b or Gemma 4 ("0": no hidden reasoning)
     # prompt tokens the GPU reads in one go: at 512, one go took ~10 s on the Vega 8 and the kernel reset the GPU
-    # under it (26.09, twice: "ring comp_1.1.0 timeout"); at 128 each go is ~2 s
+    # under it (twice: "ring comp_1.1.0 timeout"); at 128 each go is ~2 s
     batch: int = _from_env("BATCH", 128, int)
 
     # The Planner's local copy (plannerd serve --local-only on this laptop); "-" turns it off.
     planner: str = _from_env("PLANNER", "http://127.0.0.1:47211/api")
 
-    # The internet (weather, search) only through this proxy: sing-box on this laptop to the exit
-    # node. Empty: straight out. "-": no internet at all.
+    # The internet (weather, search) only through this proxy (e.g. a local sing-box to an exit
+    # node). Empty: straight out. "-": no internet at all.
     proxy: str = _from_env("PROXY", "")
     city: str = _from_env("CITY", "Москва")  # the weather when no city is named
     # SearXNG on this laptop (e.g. http://127.0.0.1:8888): searched first, it asks many engines through the
@@ -63,8 +63,8 @@ class Config:
     # Speech synthesis
     # Piper voices, compared by how well GigaAM recognises what they say (10 phrases):
     # irina 17% errors, ruslan 20%, dmitri 22%, denis 24% (and denis sounded unpleasant).
-    # Or a Vosk TTS model with its speaker after a colon: "vosk-model-tts-ru-0.7-multi:3" (the owner's
-    # choice on the laptop, 27.09; the heavier 0.9 took 7-10 s a phrase there).
+    # Or a Vosk TTS model with its speaker after a colon: "vosk-model-tts-ru-0.7-multi:3" (chosen
+    # on a Ryzen 5 3500U; the heavier 0.9 took 7-10 s a phrase there).
     voice: str = _from_env("VOICE", "vits-piper-ru_RU-ruslan-medium")
     voice_female: str = _from_env("VOICE_FEMALE", "vits-piper-ru_RU-irina-medium")
     speed: float = _from_env("SPEED", 1.0, float)

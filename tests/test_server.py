@@ -24,7 +24,7 @@ def test_wake_word_leftovers_are_dropped():
     assert server.strip_wake_word("А где мой телефон?") == "А где мой телефон?"
     assert server.strip_wake_word("Скажи, Орфей, который час") == "который час"
     assert server.strip_wake_word("Фейерверк будет вечером") == "Фейерверк будет вечером"
-    # 28.09, from a metre away: the start misheard, the comma still there
+    # from a metre away: the start misheard, the comma still there
     assert server.strip_wake_word("Арфий, который час") == "который час"
     assert server.strip_wake_word("Архей, сколько тебе лет?") == "сколько тебе лет?"
     assert server.strip_wake_word("Рофей, какие у меня планы на завтра?") == "какие у меня планы на завтра?"

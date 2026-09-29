@@ -60,7 +60,7 @@ def strip_wake_word(text, wake="орфей"):
     rest = addressed(text, wake, within=2)
     if rest is not None:
         return rest
-    # «Арфий, …», «Архей, …», «Рофей, …» (28.09, a voice from a metre away): the phone heard
+    # «Арфий, …», «Архей, …», «Рофей, …» (a voice from a metre away): the phone heard
     # «Орфей» already, so a first word two letters off it, with a comma after, is that word too
     first = re.match(r"\W*(\w{4,7}),\s*", text)
     if first and _off_by(_as_heard(first.group(1)), _as_heard(wake)) <= 1:
@@ -370,7 +370,7 @@ async def run(config: Config, host: str, port: int):
                     log("устройство: %s" % msg.get("device"))
                     await orpheus.unlock(send, msg.get("personal_key"))
                     # a new connection starts in the ordinary section: «Личное» only by its command or the button,
-                    # never carried over from before (28.09: the app restarted and was in «Личное» at once)
+                    # never carried over from before (the app restarted and was in «Личное» at once)
                     await orpheus.leave_personal("новое подключение")
                     await send({"type": "mode", "personal": orpheus.brain.personal})
                     await send(orpheus.enroll_status())

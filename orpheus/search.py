@@ -1,6 +1,6 @@
 """Search: Wikipedia for "кто такой …" / "что такое …", DuckDuckGo for the rest (through web.py);
 the Central Bank's exchange rates ("какой курс доллара?": the search's snippets name the sites, not
-the numbers - 27.09).
+the numbers).
 
 Wikipedia's summary is said by the program itself - it is shorter and surer than what a 4B model
 recalls; DuckDuckGo's results (titles, snippets, sites) are handed to the model to answer from.

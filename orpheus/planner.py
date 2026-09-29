@@ -152,7 +152,7 @@ class Planner:
     def _spaced(self, item_id):
         """plannerd keeps the later of two writes to an item by their millisecond, and drops the second of two in
         the same one: the title tidied and at once the item deleted (to become a series) left it standing
-        (28.09, «зарядка по будням»: an extra Monday and Wednesday). Two writes to one item, 3 ms apart."""
+        («зарядка по будням»: an extra Monday and Wednesday). Two writes to one item, 3 ms apart."""
         if not item_id:
             return
         last = self._written.get(item_id)
@@ -437,7 +437,7 @@ class PlannerTools:
             scored = [(sc, it) for sc, it in scored if sc * 2 > len(stems)]
         if not scored:
             return None, "нет%s в планах ничего похожего на «%s»" % (where, query)
-        # after "что у меня завтра?", "перенеси русский на 11" is tomorrow's (28.09: today's, already over, was moved to
+        # after "что у меня завтра?", "перенеси русский на 11" is tomorrow's (today's, already over, was moved to
         # 23:00): what was just read out comes first; then what is still ahead before what is over; then the nearest
         now = self.now()
         listed = {i["id"] for i in self.listed} if self.turn - self.listed_turn <= 3 else set()
@@ -756,7 +756,7 @@ class PlannerTools:
         by_words = []
         for n in notes:
             text = _canon(n.title + " " + n.body)
-            # at a word's start: "айф" of "айфон" is not in "вайфай" (28.09: a question about an iPhone brought the
+            # at a word's start: "айф" of "айфон" is not in "вайфай" (a question about an iPhone brought the
             # Wi-Fi password into the model's answer)
             hits = sum(1 for st in stems if re.search(r"(?<!\w)" + re.escape(st), text))
             if hits:
@@ -839,7 +839,7 @@ def _say(text):
 DAY_WORDS = (r"сегодня|завтра|послезавтра|вчера|позавчера|недел|выходн|месяц|через\s+\d+\s+д|\d{1,2}[./]\d{1,2}|\d{1,2}\s+(?:"
              + "|".join(MONTH_STEMS) + r")|понедельн|вторник|сред[уаы]|четверг|пятниц|суббот|воскресен")
 TIME_WORDS = re.compile(r"\d{1,2}:\d{2}|(?:^|\s)(?:в|к)\s+\d{1,2}(?!\d)|через\s+(?:\d+\s+)?(?:минут|мин|час|ч\b|полчаса)|"
-                        # "без пятнадцати 10", "четверть девятого", "20 минут девятого" (28.09: «запиши на пятницу без
+                        # "без пятнадцати 10", "четверть девятого", "20 минут девятого" («запиши на пятницу без
                         # пятнадцати десять стрижку» became a note)
                         r"(?<!\w)без\s+(?:четверти|\d{1,2}|пятнадцати|двадцати|десяти|пяти)\s+\d{1,2}(?!\d)|(?<!\w)четверть\s+(?:\w+ого|\d{1,2})(?!\w)|"
                         r"(?<!\w)\d{1,2}\s+минут\w*\s+(?:\w+ого|\d{1,2})(?!\w)|"
@@ -891,7 +891,7 @@ ADD_FILLER = re.compile(r"\b(?:мне|пожалуйста|в\s+(?:план\w*|�
 ADD_WORDS = re.compile(r"(?<!\w)(?:(?:мне|пожалуйста|в\s+(?:план|планы|календарь|планировщик|расписание|список\s+дел)|"
                        r"задачу|задача|событие|дело|напоминание|reminder|ремайндер|на\s+(?:его|её|ее|их)\s+место|"
                        r"вместо\s+(?:него|неё|нее|них))(?!\w)|"
-                       # "на 26.09", "на 3 октября" - a date; not "на 12": an hour (28.09: «Парикмахер на 12»)
+                       # "на 26.09", "на 3 октября" - a date; not "на 12": an hour («Парикмахер на 12»)
                        r"на\s+(?=завтра|сегодня|послезавтра|\d{1,2}[./]\d|\d{1,2}\s+(?:январ|феврал|март|апрел|ма[яй]|июн|июл|август|"
                        r"сентябр|октябр|ноябр|декабр)))", re.I)
 
@@ -957,7 +957,7 @@ def tidy_title(title):
     """"В стоматолога" -> "Стоматолог", "к врачу" -> "Врач", "Встречу" -> "Встреча": what is left of
     "запланируй на 3 октября в 15:30 стоматолога", "запиши меня к врачу на среду" or "добавь встречу"
     once the day and time are cut out (and "на" of "на среду" left hanging at the end)."""
-    # "завтра в 10 у меня стоматолог", "у меня в четверг репетитор" (28.09: «В репетитор»): "у меня" first
+    # "завтра в 10 у меня стоматолог", "у меня в четверг репетитор" («В репетитор»): "у меня" first
     t = re.sub(r"^у\s+(?:меня|нас)\s+(?=\S)", "", title.strip(), flags=re.I)
     # "в пятницу иду на концерт": the event, not the going
     t = re.sub(r"^(?:я\s+)?(?:иду|пойду|идем|идём|пойдем|пойдём|еду|поеду|едем|поедем|схожу|сходим|собираюсь|собираемся)"
@@ -1009,7 +1009,7 @@ def clean_quick(text, now=None, keep_weekdays=False):
     now = now or datetime.now()
     t = re.sub(r"\s[—–]\s|^[—–]\s|[,;«»\"]", " ", text)
     t = t.replace("ё", "е").replace("Ё", "Е")
-    # "на завтра в 10, нет, в 11 встречу": the time said last (28.09: «Нет в 11:00 встречу», at 10)
+    # "на завтра в 10, нет, в 11 встречу": the time said last («Нет в 11:00 встречу», at 10)
     t = re.sub(r"(?<!\w)(?:в|к|на)\s+\S+(?:\s+(?:утра|дня|вечера|ночи))?\s+(?:нет|вернее|верней|точнее|то\s+есть|ой)\s+(?=(?:в|к|на)\s)",
                "", t, flags=re.I)
 
@@ -1050,7 +1050,7 @@ def clean_quick(text, now=None, keep_weekdays=False):
 
     t = re.sub(r"(?<!\w)(?:на\s+|к\s+)?(\d{1,2})\s*-?\s*(?:е|го|ое|ого)(?:\s+числ[оау])?(?!\w)|(?<!\w)(?:на\s+|к\s+)?(\d{1,2})\s+числ[оау](?!\w)",
                lambda m: of_month(re.match(r"(\d+)", m.group(1) or m.group(2))), t, flags=re.I)
-    # "через 3 дня", "через 2 недели": a date (28.09: "3 дня" was read as 15:00)
+    # "через 3 дня", "через 2 недели": a date ("3 дня" was read as 15:00)
     t = re.sub(r"(?<!\w)через\s+(\d{1,2})\s+(дн\w*|день|недел\w*)(?!\w)",
                lambda m: (lambda d: " %d %s " % (d.day, MONTHS[d.month - 1]))(
                    now + timedelta(days=int(m.group(1)) * (7 if m.group(2).startswith("недел") else 1))),
@@ -1073,7 +1073,7 @@ def clean_quick(text, now=None, keep_weekdays=False):
     t = re.sub(r"(?<!\w)через\s+(?:(полчаса|полтора\s+часа)|(\d{1,3})?\s*(часов|часа|час|ч|минут[уы]?|мин))(?!\w)",
                later, t, flags=re.I)
 
-    # "в 7 30 утра" (the recogniser's "в семь тридцать утра", 28.09: «в 07:00 30:00 зарядку»): an hour and its minutes
+    # "в 7 30 утра" (the recogniser's "в семь тридцать утра": «в 07:00 30:00 зарядку»): an hour and its minutes
     t = re.sub(r"(?<!\w)(в|к)\s+([01]?\d|2[0-3])\s+([0-5]\d)(?!\s*(?:\d|минут|мин|час|раз|недел|дн|человек|%|рубл|процент))",
                r"\1 \2:\3", t, flags=re.I)
     marked = r"\s*(?:час(?:а|ов)?|ч\.?)?\s+(утра|дня|вечера|ночи)(?!\w)"
@@ -1088,7 +1088,7 @@ def clean_quick(text, now=None, keep_weekdays=False):
 
     t = re.sub(r"(?<![\d:])(\d{1,2})(?::([0-5]\d))?" + marked, with_part, t, flags=re.I)
     t = re.sub(r"(?<!\w)в\s+(\d{1,2})\s*(?:часов|часа|час|ч\.?)(?!\w)", lambda m: "в %s:00" % int(m.group(1)), t, flags=re.I)
-    # "к парикмахеру на субботу на 12" (28.09: a task «Парикмахер на 12»): "на" + an hour, when no other time is
+    # "к парикмахеру на субботу на 12" (a task «Парикмахер на 12»): "на" + an hour, when no other time is
     # named and nothing after it makes it a count ("на 2 недели", "на 5 человек", "на 3 октября")
     if not re.search(r"(?<![\d.])\d{1,2}:\d{2}|(?:^|\s)(?:в|к)\s+\d", t):
         t = re.sub(r"(?<!\w)на\s+(\d{1,2})(?::([0-5]\d))?(?=\s*(?:[.,!?]|$|\s+(?:утра|дня|вечера|ночи)(?!\w)))",

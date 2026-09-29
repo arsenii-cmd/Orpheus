@@ -4,7 +4,7 @@ Latency rules this client follows:
 - keep_alive=-1: the model stays in RAM, no reload between phrases;
 - the same options on every request: a different num_ctx makes Ollama reload the model;
 - streaming: text is spoken sentence by sentence while the rest is still being generated;
-- a runner that died (the GPU was reset under it: "vk::Queue::submit: ErrorDeviceLost", 26.09) is
+- a runner that died (the GPU was reset under it: "vk::Queue::submit: ErrorDeviceLost") is
   unloaded and the request made once more: Ollama itself kept answering "model runner has
   unexpectedly stopped" to every request until the model was unloaded by hand.
 Prompt caching itself happens in Ollama: it reuses the KV cache for the longest prefix
@@ -33,7 +33,7 @@ class Ollama:
         self.model = config.model
         temperature = config.temperature
         if "gemma" in config.model.lower() and not os.environ.get("ORPHEUS_TEMPERATURE"):
-            # Gemma 4 E4B called the right tool 16 times of 20 at 0.6, 19 of 20 at 0.2 (27.09)
+            # Gemma 4 E4B called the right tool 16 times of 20 at 0.6, 19 of 20 at 0.2
             temperature = 0.2
         self.options = {"num_ctx": config.num_ctx, "temperature": temperature}
         if config.batch:

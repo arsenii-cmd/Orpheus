@@ -83,7 +83,7 @@ def test_the_most_specific_template_wins():
 
 PROGRAM = {  # phrase -> the scenario that answers it, without the model
     "Который час?": "time", "Сколько сейчас времени?": "time", "Время?": "time",
-    # «напомни» перед вопросом — вопрос, не напоминание (28.09)
+    # «напомни» перед вопросом — вопрос, не напоминание
     "Напомни, что ты умеешь делать?": "capabilities", "Напомни какое сегодня число": "date",
     "Какое сегодня число?": "date", "Какой сегодня день недели?": "date", "Какая сегодня дата?": "date",
     "Какой день недели будет 1 октября?": "date_of", "Какое число будет в пятницу?": "date_of",
@@ -690,7 +690,7 @@ def test_repeats_by_weeks_and_months_on_any_days():
     quick.clear()
     say(brain, "Добавь бассейн каждый вторник и четверг в 20 10 раз.")
     assert quick == ["во вторник бассейн в 20", "в четверг бассейн в 20"]
-    # 28.09: the recogniser dropped the commas, and the days came with "в" instead of "по"
+    # the recogniser dropped the commas, and the days came with "в" instead of "по"
     quick.clear(), saved.clear()
     assert say(brain, "Поставь тренировку по понедельникам средам и пятницам в 6 утра.").startswith(
         "Добавил по понедельникам, средам и пятницам, 26 недель")
@@ -868,7 +868,7 @@ def test_the_first_greeting_of_the_day_brings_its_summary_by_name():
 
 
 def test_an_item_there_repeats_and_its_repeat_is_changed_whole():
-    # 28.09: "сделай повтор тренировки 10 недель" went to the model, which has no tool for it
+    # "сделай повтор тренировки 10 недель" went to the model, which has no tool for it
     brain = make({"id": "t", "kind": "event", "title": "Тренировка", "date": "2026-09-26", "start_time": "07:00"})
     rows = brain.planner.planner.rows
     assert say(brain, "Сделай повтор тренировки 10 недель.") == "Теперь «Тренировка» повторяется каждую неделю, 10 раз, с 26 сентября."
@@ -929,7 +929,7 @@ def test_ways_to_ask_for_a_repeat():
     assert brain.skills and say(brain, "Повтори.") == "Я пока ничего не говорил."  # not a repeat of a plan
 
 
-# the review of 28.09 (/code-review high orpheus/): each case it found
+# a code review: each case it found
 
 def test_review_repeat_of_a_list_asks_which_and_undoes():
     brain = make({"id": "a", "kind": "event", "title": "Тренировка", "date": "2026-09-26", "start_time": "07:00"},
@@ -1034,7 +1034,7 @@ def test_the_training_as_it_was_asked_on_28_09():
     assert len(fake.rows) == 30 and not any(r["title"] == "Тогда" for r in fake.rows.values())
 
 
-# 28.09: speech as it is said (scripts/bench_speech.py found each of these)
+# speech as it is said (scripts/bench_speech.py found each of these)
 
 def test_speech_as_said():
     brain = make({"id": "f", "kind": "event", "title": "Физика", "date": "2026-09-25", "start_time": "18:00"},
@@ -1110,7 +1110,7 @@ def test_spoken_times_and_titles():
 
 
 def test_conversation_as_it_goes():
-    # 28.09, bench_speech «разговор»: after «что у меня завтра?», «перенеси русский на 11» is tomorrow's
+    # bench_speech «разговор»: after «что у меня завтра?», «перенеси русский на 11» is tomorrow's
     brain = make({"id": "a", "kind": "event", "title": "Русский", "date": "2026-09-25", "start_time": "18:00"},
                  {"id": "b", "kind": "event", "title": "Русский", "date": "2026-09-26", "start_time": "10:00"},
                  {"id": "r", "kind": "event", "title": "Хакатон", "date": "2026-09-26", "start_time": "10:00"})

@@ -26,7 +26,7 @@ class OrpheusAssistant : VoiceInteractionService()
 
 /**
  * What the Galaxy Buds' "touch and hold → Digital assistant" really sends: android.intent.action.VOICE_COMMAND
- * (28.09: the system asked "Google or Perplexity?" — Orpheus was not among them). Shows nothing: summons
+ * (the system asked "Google or Perplexity?" — Orpheus was not among them). Shows nothing: summons
  * Orpheus and closes. An activity in front is also what Android wants for starting the microphone service.
  */
 class VoiceCommandActivity : android.app.Activity() {
@@ -113,7 +113,7 @@ class OrpheusRecognition : RecognitionService() {
     }
 
     private companion object {
-        // what the phone had as its default recognizer before Orpheus (28.09, the owner's S24)
+        // what the phone had as its default recognizer before Orpheus (a Samsung phone)
         val GOOGLE = ComponentName("com.google.android.tts", "com.google.android.apps.speech.tts.googletts.service.GoogleTTSRecognitionService")
     }
 }

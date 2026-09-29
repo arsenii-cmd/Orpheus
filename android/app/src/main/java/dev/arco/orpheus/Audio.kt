@@ -22,7 +22,7 @@ fun levelDb(frame: ShortArray, count: Int = frame.size): Double {
 
 /**
  * Loudness without the rumble under 100 Hz (2nd-order Butterworth high-pass). A fan or a humming
- * desk is 99 % of a quiet room's sound there and none of a voice's: on 28.09 it kept the room only
+ * desk is 99 % of a quiet room's sound there and none of a voice's: it kept the room only
  * 4-7 dB under a voice read from a metre away, under the VAD's 9 dB margin, so no phrase ever
  * "started" and each one waited out the 6 s limit; without it the same voice stood 13-18 dB out.
  * Only the measure: the audio sent to the server is untouched. Keeps its state between frames, so
@@ -75,7 +75,7 @@ class Rumble(cutoffHz: Double = 100.0, rate: Int = SAMPLE_RATE) {
  */
 class EnergyVad(
     private val marginDb: Double = 9.0,
-    private val minSpeechDb: Double = -60.0,  // -55 missed a quiet voice after the wake word (27.09)
+    private val minSpeechDb: Double = -60.0,  // -55 missed a quiet voice after the wake word
     private val startMs: Int = 150,
     private val silenceMs: Int = 1_000,
     private val historyFrames: Int = 160,  // 8 s of 50 ms frames: longer than any phrase without a pause

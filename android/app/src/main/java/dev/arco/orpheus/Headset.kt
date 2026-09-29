@@ -10,7 +10,7 @@ import android.os.Looper
 
 /**
  * The earbuds' microphone (Galaxy Buds and the like) for everything Orpheus hears, while they are
- * connected: the owner talks into them, and the phone may lie on a desk a metre away (28.09: read
+ * connected: the owner talks into them, and the phone may lie on a desk a metre away (read
  * from there, a voice stood only 4-7 dB over the room and no phrase was ever noticed).
  *
  * Android records from the phone's own microphone unless an app asks for the headset's: here the

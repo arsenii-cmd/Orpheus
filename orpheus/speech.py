@@ -103,7 +103,7 @@ class Voice:
         return audio.samples, audio.sample_rate
 
 
-# Vosk TTS knows Russian letters only: "SOS" in a reply broke it (KeyError 'o', 27.09) and the phone
+# Vosk TTS knows Russian letters only: "SOS" in a reply broke it (KeyError 'o') and the phone
 # waited for the rest of the reply. Latin is said as Russian would: an acronym by its letters, a word as read.
 LETTER_NAMES = dict(zip("abcdefghijklmnopqrstuvwxyz", ["эй", "би", "си", "ди", "и", "эф", "джи", "эйч", "ай", "джей", "кей",
                                                      "эл", "эм", "эн", "о", "пи", "кью", "ар", "эс", "ти", "ю", "ви",
@@ -111,7 +111,7 @@ LETTER_NAMES = dict(zip("abcdefghijklmnopqrstuvwxyz", ["эй", "би", "си", "
 LETTER_SOUNDS = dict(zip("abcdefghijklmnopqrstuvwxyz", ["а", "б", "к", "д", "е", "ф", "г", "х", "и", "дж", "к", "л", "м", "н",
                                                       "о", "п", "к", "р", "с", "т", "у", "в", "в", "кс", "й", "з"]))
 LATIN = re.compile(r"[A-Za-z]+")
-# what Vosk has sounds for; the rest (quotes too: «команду "Стоп"» broke it, 27.09) is left out before it
+# what Vosk has sounds for; the rest (quotes too: «команду "Стоп"» broke it) is left out before it
 NOT_RUSSIAN = re.compile(r"[^А-Яа-яЁё0-9\s.,!?;:\-—–]")
 
 

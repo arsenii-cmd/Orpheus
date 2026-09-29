@@ -98,7 +98,7 @@ PERSONAL_MODE = """Сейчас раздел «Личное»: разговор 
 # tolerant to what the recogniser makes of them: "хватит о личном" came out as "Кватит его лично"
 EXIT_PERSONAL = re.compile(r"([хк]вати\w*|закончим|закончили|довольно|стоп)\W+(\w{1,4}\W+)?лич|выйд\w*\W+из\W+лич|"
                            r"выключи\W+лич|обычн\w+\s+режим", re.I)
-# only a command: "давай лично встретимся" or "это личное дело" is not one (28.09: «Личное» only when asked)
+# only a command: "давай лично встретимся" or "это личное дело" is not one («Личное» only when asked)
 ENTER_PERSONAL = re.compile(r"(поговорим|поговорить|поболтаем)\s+(о|про)\s+личн|^\W*(режим|раздел)?\s*личн(ое|ого|ый)\W*$|"
                             r"(включи|открой)\s+(режим\s+|раздел\s+)?личн(ое|ый|ого)(?!\w)|давай\s+(о|про)\s+личн", re.I)
 
@@ -138,7 +138,7 @@ def mode_command(text):
 WEEKDAYS = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
 MAX_TOOL_ROUNDS = 4
 # a phrase about the plans that the model answers gets the planner's days next to it
-# (not "планета": "сколько планет в Солнечной системе?" got the day's plans read out after the answer, 27.09)
+# (not "планета": "сколько планет в Солнечной системе?" got the day's plans read out after the answer)
 PLANS_TALK = re.compile(r"(?:что|есть)\s+(?:ли\s+)?у\s+меня|загруж|нагруз|свободн|(?<!\w)план(?:а|у|ом|е|ы|ов|ам|ами|ах)?(?!\w)|"
                         r"планир|расписан|календар|заняти|встреч|событи|задач|(?<!\w)дел(?:а|ам|ах|ами)?(?!\w)|свобод|"
                         r"(?<!\w)занят(?:а|о|ы)?(?!\w)", re.I)
@@ -154,18 +154,18 @@ CLAIM = re.compile(r"^\W*(?:(?:готово|хорошо|понял|поняла
                    re.I)
 NOT_DONE = "Этого я не сделал: не понял, что именно. Скажите, пожалуйста, иначе."
 # asked to do something the program did not take: the model's whole answer is read before it is said, for a
-# "я добавил тренировку" anywhere in it with nothing called ("В четверг пусто, поэтому я добавил…", 27.09)
+# "я добавил тренировку" anywhere in it with nothing called ("В четверг пусто, поэтому я добавил…")
 ACTION_REQUEST = re.compile(r"(?<!\w)(?:добав|запиш|запомн|удал|перенес|перенеси|отмет|постав|напомн|измени|поменя|"
                             r"переименуй|внеси|сохрани|забудь|отмени|сотри)\w*", re.I)
-# "У вас запланировано занятие по физике в 16:40" with nothing called and nothing like it in the plans (27.09)
-# any person: "Вы перенесли занятие на завтра" with nothing called (28.09, to "он сказал, что перенесёт встречу")
+# "У вас запланировано занятие по физике в 16:40" with nothing called and nothing like it in the plans
+# any person: "Вы перенесли занятие на завтра" with nothing called (to "он сказал, что перенесёт встречу")
 CLAIM_ANY = re.compile(r"(?<!\w)(?:запланировал|добавил|записал|запомнил|удалил|перен[её]с|отметил|поставил|вн[её]с|сохранил|"
                        r"зафиксировал|обновил|изменил|переименовал|отменил|забыл)(?:[аи]|ли|ла|ло)?(?!\w)|"
                        r"(?<!\w)(?:перенесен|удален|добавлен|отмечен|записан|запланирован|отменен)[аоы]?(?!\w)", re.I)
 
 
 # a search promised, or said impossible, with none made: "Позвольте мне поискать.", "Я не могу найти
-# стоимость в интернете прямо сейчас" (Gemma 4, 27.09) - the program searches
+# стоимость в интернете прямо сейчас" (Gemma 4) - the program searches
 SEARCH_PROMISE = re.compile(r"(?<!\w)(?:поищу|поискать|найду\s+информац|посмотрю\s+в\s+интернете|уточню\s+в\s+интернете|"
                             r"проверю\s+в\s+интернете|сейчас\s+найду)(?!\w)|"
                             r"(?<!\w)не\s+(?:могу|удалось|получилось|получается)\s+(?:\w+\s+){0,3}?(?:найти|узнать|проверить|посмотреть)"
@@ -339,7 +339,7 @@ class Brain:
 
     def _recall(self, text):
         """Notes and past exchanges related to the phrase: in «Личное» both memories, marked by where they are
-        from; in the ordinary section the general one only — nothing of «Личное» comes into it (28.09: the owner
+        from; in the ordinary section the general one only — nothing of «Личное» comes into it (the owner
         asked that it remember nothing of «Личное» there; up to two of its turns and notes were brought in)."""
         mine = self.active
         # past exchanges of this very conversation are in the history already: not again (each costs
@@ -526,7 +526,7 @@ class Brain:
                     retried = True
                     continue
                 # nothing said and nothing called: Gemma 4 wrote its call as "call{web_search{…}}", and
-                # Ollama's parser dropped it ("gemma4 tool call parsing failed" in its log; 10 times on 27.09)
+                # Ollama's parser dropped it ("gemma4 tool call parsing failed" in its log; 10 times)
                 lost = not content and not calls
                 answer += content
                 reply = {"role": "assistant", "content": content.strip()}

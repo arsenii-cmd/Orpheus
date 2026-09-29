@@ -57,7 +57,7 @@ def test_personal_section_writes_to_its_own_memory_and_back():
 
 
 def test_the_ordinary_section_remembers_nothing_of_personal():
-    # 28.09, the owner: in the ordinary section it must remember nothing of «Личное», even asked about it
+    # the owner: in the ordinary section it must remember nothing of «Личное», even asked about it
     b = make(text("Не знаю."), text("Ты переживал из-за ссоры."), embedder=WordEmbedder())
     b.private.remember("Хозяин поссорился с Виктором из-за денег")
     b.private.add_note("Виктор занял у меня пять тысяч")

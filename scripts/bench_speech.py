@@ -350,7 +350,7 @@ DIALOGS = [
 ]
 
 
-# ---------------------------------------------------------------------------------------- round two (28.09)
+# ---------------------------------------------------------------------------------------- round two
 # which item the planner picks, words for the time, speech that is not to Orpheus, ways to stop
 
 DIALOGS += [
@@ -492,7 +492,7 @@ DIALOGS += [
     ]),
 ]
 
-# ---------------------------------------------------------------------------------------- round three (28.09)
+# ---------------------------------------------------------------------------------------- round three
 # whole conversations the way they go, corrections said in passing, dates in words, hesitation
 
 DIALOGS += [

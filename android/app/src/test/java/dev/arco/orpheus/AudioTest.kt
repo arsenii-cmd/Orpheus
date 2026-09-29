@@ -44,7 +44,7 @@ class AudioTest {
     }
 
     @Test fun aQuietVoiceOverALoudHumStillStarts() {
-        // 28.09: a hum under 100 Hz kept a voice from a metre away only 4-7 dB over the room
+        // a hum under 100 Hz kept a voice from a metre away only 4-7 dB over the room
         fun hum(offset: Int) = ShortArray(frame) { (sin(2 * PI * 30 * (offset + it) / SAMPLE_RATE) * 800).toInt().toShort() }
         fun mix(a: ShortArray, b: ShortArray) = ShortArray(frame) { (a[it] + b[it]).toShort() }
         // measured as it is, the hum drowns the voice: under the VAD's 9 dB margin

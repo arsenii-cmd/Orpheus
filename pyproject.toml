@@ -11,7 +11,7 @@ dependencies = [
     "websockets>=13",
     "fastembed>=0.5",
     "cryptography>=42",
-    "vosk-tts>=0.3",  # the voice on the laptop since 27.09 (speech.py, VoskVoice)
+    "vosk-tts>=0.3",  # the Vosk TTS voices (speech.py, VoskVoice)
 ]
 
 [project.optional-dependencies]

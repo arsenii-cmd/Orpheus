@@ -31,7 +31,7 @@ const val WAKE_WORD = "орфей"
  */
 /**
  * Where in the ring buffer the wake word ends. Vosk times its words by the audio fed to it, but whether
- * its reset starts that count over is not to be relied on (27.09: counted from the wrong start, the phrase
+ * its reset starts that count over is not to be relied on (counted from the wrong start, the phrase
  * after every «Орфей» but the first was never sent). Both readings are tried; the latest that lies in the
  * audio actually kept wins - the wake word has only just ended. Null: neither does.
  */

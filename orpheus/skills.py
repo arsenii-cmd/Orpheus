@@ -101,7 +101,7 @@ DAYS_ACC = ["в понедельник", "во вторник", "в среду",
 # what follows "удали/отмени" and is no planner item: a change of mind, a thought (the undo's or the model's)
 NOT_PLANS = re.compile(r"(?<!\w)(?:я|мы)\s+(?:уже\s+)?передумал\w*|(?<!\w)передумал\w*|из\s+головы|(?<!\w)забудь(?!\w)|"
                        r"^\W*(?:я|мы|ты)\s+\w+л[аи]?(?!\w)", re.I)
-# "Напомни, какое сегодня число": a question, not a reminder (28.09: a task «Какое число» was added)
+# "Напомни, какое сегодня число": a question, not a reminder (a task «Какое число» was added)
 REMIND_ASKS = re.compile(r"^\W*(?:напомни|напомните)(?:\s+мне)?[\s,:—-]+(?=(?:(как\w*|кто|кого|кому|где|куда|когда|сколько|почему|"
                          r"зачем|чей|чья|чье|чьи|во\s+сколько|о\s+ч[её]м)|что|чт[оа]|про|об?|чем)(?!\w))", re.I)
 # said as it is spoken: "че у меня на завтра", "сколько щас времени"
@@ -397,7 +397,7 @@ def TOLD_PLAN(text):
             and not when_only(text)  # "завтра в 12." - no what
             and not re.search(r"(?<!\w)(?:был|была|было|были|вчера|позавчера|прошл\w*|не\s+надо|не\s+нужно)(?!\w)", text, re.I)
             # "я завтра в 10 не смогу прийти", "он сказал, что перенесёт встречу на завтра": said to someone, or
-            # about someone else - not a plan to add (28.09: «Я в не смогу прийти» was added)
+            # about someone else - not a plan to add («Я в не смогу прийти» was added)
             and not re.search(r"(?<!\w)не\s+(?!забудь|забыть)\w+|(?<!\w)(?:сказал\w*|говорит|говорил\w*|пишет|написал\w*|"
                               r"обещал\w*|думаю|думает|кажется)(?!\w)", text, re.I))
 
@@ -532,7 +532,7 @@ class Skills:
         result = self._dispatch(self._carry_last(last, text), now)
         if result is None and TOLD_PLAN(text):
             # "В понедельник в 16:40 занятие по физике." - a plan told, not asked about: the model answered
-            # "У вас запланировано…" and nothing was added (27.09). Added; "верни" undoes it
+            # "У вас запланировано…" and nothing was added. Added; "верни" undoes it
             result = self._dispatch("добавь " + text.strip(), now)
         return result
 
@@ -1326,7 +1326,7 @@ class Skills:
         if self.planner is None:
             return None
         what = m.slots.get("what", "")
-        # "можешь добавить встречу завтра в 12?", "добавишь …?": a request asked as a question (28.09)
+        # "можешь добавить встречу завтра в 12?", "добавишь …?": a request asked as a question
         polite = m.template.startswith(("(можешь", "(добавишь"))
         if ("?" in self.heard and not polite) or re.search(r"заметк|памят", what, re.I):
             return None  # "напомни, что у меня завтра?" asks; "добавь в заметки" is a note
@@ -1336,12 +1336,12 @@ class Skills:
         if m.template.startswith(("(добавь|", "(можешь", "(добавишь")) and not (_has_day(what) or _has_time(what)) \
                 and not PLAN_MARKED.search(self.heard) and not PLAN_LIKE.search(what) \
                 and not re.search(r"(?<!\w)(?:запланируй|запланировать|назначь|забронируй)(?!\w)", self.heard, re.I):
-            # "добавь сахар в чай", "поставь чайник", "добавь громкости" (28.09: each became a task for today): the
+            # "добавь сахар в чай", "поставь чайник", "добавь громкости" (each became a task for today): the
             # model's, which can still add a plan by its own tool if it is one
             return None
         # "добавь задачу купить молоко", "внеси в план ...": not part of the title
         what = " ".join(ADD_WORDS.sub(" ", what).split())
-        # "добавь, короче, на послезавтра созвон" (28.09: «Эээ добавь короче созвон»)
+        # "добавь, короче, на послезавтра созвон" («Эээ добавь короче созвон»)
         what = " ".join(SPOKEN_FILLERS.sub(" ", what).split()).strip(" ,:;")
         if not re.search(r"\w", what):
             return None
@@ -1350,7 +1350,7 @@ class Skills:
             return self._add_several(pieces)
         if not (_has_day(what) or _has_time(what)) and EVENT_NOUN.search(what) and not PLAN_MARKED.search(self.heard) \
                 and not m.template.startswith("напомни"):
-            # "добавь встречу": an event with no day or time - asked for, and the answer completes it (28.09: a task
+            # "добавь встречу": an event with no day or time - asked for, and the answer completes it (a task
             # «Встреча» for today, and then «Завтра в 12» said "пустое название")
             self.awaiting = (self.turn, what)
             return "На когда поставить «%s»?" % tidy_title(what)
@@ -1666,7 +1666,7 @@ class Skills:
 
     def do_plan_fix(self, m, now):
         """"нет, лучше на 15" right after adding or moving: that item goes there instead. Only a day and a time:
-        "в пятницу в 8 вечера иду на концерт" said right after adding is a plan of its own (28.09: it moved the
+        "в пятницу в 8 вечера иду на концерт" said right after adding is a plan of its own (it moved the
         item added before to Friday)."""
         planner = self.planner
         if planner is None or planner.last_write != planner.turn - 1 or len(planner.focus) != 1:
@@ -1684,7 +1684,7 @@ class Skills:
         if ALL_OF.match(normalize_low(what)) or m.template.startswith("(очисти|"):
             return self._delete_all(what, now)
         if NOT_PLANS.search(what):
-            return None  # "отмени, я передумал", "удали это из головы, забудь" (28.09: "не нашёл в планах «я передумал»")
+            return None  # "отмени, я передумал", "удали это из головы, забудь" ("не нашёл в планах «я передумал»")
         item, problem = self._item(what)
         if item is None:
             return problem
@@ -1704,7 +1704,7 @@ class Skills:
 
     def _other_day(self, asked, text, now):
         """"Удалить сегодня — занятие по русскому?" - "нет, завтрашнее": the item of that title on the day now named,
-        or None (28.09: "Хорошо, не удаляю", and the one meant was never offered)."""
+        or None ("Хорошо, не удаляю", and the one meant was never offered)."""
         if asked is None or self.planner is None:
             return None
         low = normalize_low(text)
@@ -2010,7 +2010,7 @@ class Skills:
         """"Посмотри, что у меня в четверг, и если там пусто — добавь тренировку в 18", "если я свободен в пятницу,
         запиши кино в 19": the day is looked at by the program, and the plan goes in only when it is empty (or,
         "свободен", when that time is free); else what is there is said and "добавить всё равно?" asked.
-        The model did it right, but in 21 s (27.09)."""
+        The model did it right, but in 21 s."""
         if self.planner is None:
             return None
         what = m.slots.get("what", "").strip(" ,.!?—-")
@@ -2137,7 +2137,7 @@ class Skills:
             except Offline:
                 # (DuckDuckGo shuts the exit node out with a captcha for hours now and then): what the model knows,
                 # said as such - "кто был первым президентом России" is not left at "не отвечает"; its "не могу
-                # найти" after it is no reason to search once more (17 s, 27.09)
+                # найти" after it is no reason to search once more (17 s)
                 def down():
                     context = Context(SEARCH_DOWN)  # not as a search's result: "поиск показал…", it said to that
                     context.tried = True

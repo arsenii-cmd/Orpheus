@@ -129,7 +129,7 @@ class AssistantMachine(var config: MachineConfig = MachineConfig()) {
         val elapsed = now - since
         when (phase) {
             Phase.Listening -> when {
-                // the phone's VAD heard nothing, yet the owner may have spoken quietly (27.09: "Орфей" was
+                // the phone's VAD heard nothing, yet the owner may have spoken quietly ("Орфей" was
                 // caught, the phrase after it was not, and it was thrown away): the server's recogniser decides
                 !heardSpeech && elapsed >= config.noSpeechMs -> finishListening(now, effects)
                 elapsed >= config.maxUtteranceMs -> finishListening(now, effects)
