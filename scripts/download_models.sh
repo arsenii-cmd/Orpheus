@@ -36,7 +36,7 @@ for VOICE in $VOICES; do
   VOICE="${VOICE%%:*}"  # "vosk-model-tts-ru-0.7-multi:3" -> the model's name
   case "$VOICE" in
     vosk-model-tts-*)
-      # not a sherpa-onnx release: from alphacephei.com/vosk/models, unpacked here by hand (docs/NEXT.md)
+      # not a sherpa-onnx release: from alphacephei.com/vosk/models, unpacked here by hand
       [ -d "$VOICE" ] || echo "голос Vosk $VOICE: не скачивается этим скриптом, положи модель в $DIR/$VOICE" ;;
     *) [ -f "$VOICE/tokens.txt" ] || fetch tts-models "$VOICE" ;;
   esac
