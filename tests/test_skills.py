@@ -1391,3 +1391,17 @@ def test_lets_add_postpone_by_days_and_titles_from_speech():
     assert say(brain, "отложи хакатон на 2 дня").startswith("Перенёс на понедельник, 28 сентября")
     assert [tidy_title(t) for t in ("Давай запишем химию", "Там купить билеты", "Контрольную")] == [
         "Химия", "Купить билеты", "Контрольная"]
+
+
+def test_plan_news_is_acted_on_or_asked_about():
+    # the sixth talk: "хакатон отменяется", "физика теперь называется мехи", "хакатон переезжает на вечер часов на 7",
+    # "его зовут Мурзик" -> "принято", "переименована", "теперь в 19:00", "записал" from the model, nothing done
+    brain = make(*WEEK, replies=[text("Ясно.")] * 2)
+    assert say(brain, "хакатон отменяется").startswith("Удалить завтра")
+    say(brain, "нет")
+    assert say(brain, "физика теперь называется мехи") == "Переименовал: теперь это «Мехи»."
+    assert "с 19:00 до 22:00 Хакатон" in say(brain, "хакатон переезжает на вечер часов на 7")
+    say(brain, "у меня есть кот")
+    say(brain, "его зовут Мурзик")
+    assert [t for _, t in brain.memory.facts()] == ["У меня есть кот по имени Мурзик"]
+    assert say(brain, "мой любимый цвет какой") == "Ясно."

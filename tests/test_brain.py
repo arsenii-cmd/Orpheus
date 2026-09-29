@@ -248,3 +248,11 @@ def test_a_claim_in_the_middle_of_an_answer_is_not_said():
     assert "".join(brain.ask("мне надо в спортзал", now=NOW)) == "Могу добавить это в планы, если скажешь время."
     brain = make(text("Эйнштейн создал теорию относительности."))
     assert "".join(brain.ask("кто такой Эйнштейн", now=NOW)) == "Эйнштейн создал теорию относительности."
+
+
+def test_the_programs_not_done_never_stays_in_the_models_history():
+    # the sixth talk: after a few "Этого я не сделал…" in its history the model answered "что у меня завтра утром" with it
+    from orpheus.brain import NOT_DONE
+    brain = make(text("Я добавил встречу."), text("Я добавил встречу."), text("Хорошо."))
+    assert "".join(brain.ask("добавь что-нибудь", now=NOW)) == NOT_DONE
+    assert not any(NOT_DONE in str(m.get("content")) for m in brain.messages())
