@@ -1424,7 +1424,7 @@ def test_what_the_seventh_talk_showed():
     assert "с 21:00 до 22:40" in say(brain, "ЕГЭ не в 22 а в 9")  # "в 9" of a 22:00 exam is 21:00, not 09:00
     assert say(brain, "у меня завтра нет русского").startswith("Удалить завтра")
     say(brain, "нет")
-    assert say(brain, "напомни завтра за час до хакатона").startswith("Напомню за 60 минут до «Хакатон»")
+    assert say(brain, "напомни завтра за час до хакатона").startswith("Напомню за час до «Хакатон»")
     say(brain, "перенеси встречу с Димой на 16")
     assert say(brain, "нет не с Димой а с Аней") == "Переименовал: теперь это «Встреча с Аней»."
     assert say(brain, "удали всё кроме хакатона") == "Скажи, за какой день удалить всё."
@@ -1451,5 +1451,35 @@ def test_what_the_eighth_talk_showed():
     assert say(brain, "а в 15 я свободен завтра").startswith("Да, завтра в 15:00")
     assert say(brain, "я перешёл в 12") == "Ясно."
     assert say(brain, "и напомни за час") == "За час до чего напомнить?"
-    assert say(brain, "до хакатона").startswith("Напомню за 60 минут до «Хакатон»")
+    assert say(brain, "до хакатона").startswith("Напомню за час до «Хакатон»")
     assert say(brain, "хакатон закончился").startswith("Отметил")
+
+
+def test_what_the_ninth_talk_showed_about_ages():
+    # "ему не десять а двенадцать", "Диме исполнилось четырнадцать", "я ошибся Диме шестнадцать", "на самом деле ей
+    # шестнадцать": the model said "обновляю информацию" each time, and the first age stayed
+    brain = make(replies=[text("Ясно.")] * 2)
+    say(brain, "у меня брат Дима ему десять")
+    assert say(brain, "ему не десять а двенадцать") == "Запомнил: у тебя брат Дима ему 12 лет."
+    assert say(brain, "Диме исполнилось четырнадцать") == "Запомнил: у тебя брат Дима ему 14 лет."
+    say(brain, "у меня сестра Аня")
+    say(brain, "ей 15")
+    assert say(brain, "на самом деле ей шестнадцать") == "Запомнил: у тебя сестра Аня, ей 16 лет."
+    assert [t for _, t in brain.memory.facts()] == ["У меня брат Дима ему 14 лет", "У меня сестра Аня, ей 16 лет"]
+
+
+def test_what_the_ninth_talk_showed():
+    brain = make(*WEEK, replies=[text("Ясно.")] * 3)
+    assert "с 11:00 до 14:00 Хакатон" in say(brain, "хакатон начнётся на час позже")
+    assert say(brain, "поставь напоминание за час до хакатона").startswith("Напомню за час до «Хакатон»")
+    assert say(brain, "напомни про ЕГЭ за два часа").startswith("Напомню за 2 часа до «ЕГЭ»")
+    assert say(brain, "какие у меня напоминания").startswith("Напомню: о «Хакатон» — за час")
+    say(brain, "перенеси ЕГЭ на 21")
+    assert say(brain, "верни хакатон").startswith("Вернул как было") and "Хакатон" in brain.last_reply
+    assert "с 19:00 до 20:30 Физика" in say(brain, "перенеси физику на сегодня на вечер")
+    assert say(brain, "добавь на завтра в 25 часов сон").startswith("Такого часа нет")
+    say(brain, "мой любимый цвет синий")
+    assert say(brain, "поменяй мой любимый цвет на красный") == "Запомнил: твой любимый цвет красный."
+    say(brain, "я сдаю физику и информатику")
+    assert say(brain, "забудь что я сдаю физику") == "Забыл про физику."
+    assert say(brain, "что ты обо мне знаешь") == "Я помню: твой любимый цвет красный; ты сдаёшь информатику."

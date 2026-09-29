@@ -64,7 +64,7 @@ FOLLOW_START = re.compile(r"^\W*(?:(?:а|ага|угу|ну|и|так|тогда
 FOLLOW_WORDS = {"а", "и", "ну", "что", "как", "там", "тогда", "будет", "будут", "было", "на", "в", "во", "про", "по",
                 "поводу", "насчет", "с", "тоже", "еще", "же", "вообще"}
 FOLLOW_WORDS_PLANS = FOLLOW_WORDS | {"у", "меня", "нас", "есть", "планы", "план", "плану", "дела", "какие"}
-FOLLOW_WORDS_WEATHER = FOLLOW_WORDS  # "какая погода в Сочи?" is a question of its own, not "а в Сочи?"
+FOLLOW_WORDS_WEATHER = FOLLOW_WORDS | {"сейчас", "сегодня"}  # "а в Лондоне сейчас" (the model made up +14)
 # a day as said, with what goes before it: "на эту субботу", "в понедельник", "через 2 дня", "завтра"
 DAY_EXPR = re.compile(r"(?<!\w)(?:(?:на|в|во|к|до|с|через|эт\w+|следующ\w+|ближайш\w+|будущ\w+)\s+)*\w*(?:%s)\w*" % DAY_WORDS,
                       re.I)
@@ -302,6 +302,14 @@ def to_you(fact):
         return out if out is not None else w
     said = re.sub(r"\w+", turn, fact)
     return said[:1].lower() + said[1:] if not re.match(r"[А-ЯЁ]{2}", said) else said
+
+
+def _minutes_said(n):
+    """120 -> "2 часа", 60 -> "час", 90 -> "90 минут"."""
+    if n and n % 60 == 0:
+        h = n // 60
+        return "час" if h == 1 else "%d %s" % (h, plural(h, "час", "часа", "часов"))
+    return "%d %s" % (n, plural(n, "минуту", "минуты", "минут"))
 
 
 def search_query(text):
@@ -588,7 +596,8 @@ class Skills:
         # "напомни, какое сегодня число": a question whatever it names; "напомни, что я говорил про Виктора" too,
         # but "напомни, что завтра в 10 врач" is a reminder
         self.rewritten = None
-        if asks and (asks.group(1) or REMIND_PAST.match(text) or not (_has_day(text) or _has_time(text))):
+        before = re.search(r"(?<!\w)за\s+(?:\S+\s+)?(?:час\w*|минут\w*|полчаса)(?!\w)", text, re.I)  # "напомни про ЕГЭ за 2 часа"
+        if asks and not before and (asks.group(1) or REMIND_PAST.match(text) or not (_has_day(text) or _has_time(text))):
             text = self.rewritten = text[asks.end():]  # the model gets it so too: a question, not about its memory
         self.heard = text
         self.handled = None
@@ -857,7 +866,8 @@ class Skills:
         if not last or last[0] not in WEATHER:
             return text
         m = self._specific(text)
-        if m is None or m.intent not in ("weather_rain", "weather_clothes", "weather_wind", "weather_humidity", "weather_degrees"):
+        if m is None or m.intent not in ("weather_rain", "weather_clothes", "weather_wind", "weather_humidity", "weather_degrees",
+                                         "weather_sun"):
             return text
         prev = to_digits(last[1])
         extra = []
@@ -1305,7 +1315,10 @@ class Skills:
             self.brain.refresh_facts()
             return "Понял, убрал из памяти."
         fact = _cap(re.sub(r"^\W*(?:(?:ну|слушай|кстати|короче|вот|а|теперь|поправка|нет)\W+)*", "", to_digits(heard) if m.slots.get("age")
-                           else heard).rstrip(" .!"))
+                           or re.search(r"(?<!\w)(?:ему|ей)\s", heard, re.I) else heard).rstrip(" .!"))
+        fact = re.sub(r"\s+запомни$", "", fact, flags=re.I)
+        # "у меня брат Дима ему 10": "лет" added, so that a later "ему не десять а двенадцать" finds the age
+        fact = re.sub(r"(?<!\w)(ему|ей)\s+(\d{1,3})$", lambda x: "%s %s %s" % (x.group(1), x.group(2), plural(int(x.group(2)), "год", "года", "лет")), fact)
         fact = re.sub(r"(?<!\w)теперь\s+", "", fact, flags=re.I)
         if m.slots.get("old"):  # "лучший друг у меня не Егор а Костя"
             fact = "Мой лучший друг %s" % m.slots["name"].strip(" .!")
@@ -1326,16 +1339,6 @@ class Skills:
         # a newer word for the same thing replaces the old one: "моего друга зовут …", "моя любимая еда …", "мне 17 лет";
         # "теперь друга зовут Миша" said without "моего" (told so, the model said "обновляю" and kept the old one)
         who = m.slots.get("who", "")
-        if m.template.startswith("(ей|ему)"):
-            # "ей 12" after "у меня сестра Маша": the age goes to her (the model said "Этого я не сделал")
-            who = next(((i, t) for i, t in reversed(facts) if re.search(PET, t, re.I) and not re.search(r"\d+\s+(?:лет|год)", t)), None)
-            if who is None or not re.fullmatch(r"\d{1,3}", to_digits(m.slots["age"]).strip()):
-                return None
-            n = int(to_digits(m.slots["age"]))
-            said = "ему" if re.match(r"\W*ему", self.heard, re.I) else "ей"  # the word said, not the template's first
-            memory.update_fact(who[0], "%s, %s %d %s" % (who[1].rstrip(" ."), said, n, plural(n, "год", "года", "лет")))
-            self.brain.refresh_facts()
-            return "Запомнил."
         if m.template.startswith("[а] (его|ее|её) (зовут"):
             # "его зовут Мурзик" after "у меня есть кот": the pet's name added to it (the model said "записал")
             pet = next(((i, t) for i, t in reversed(facts) if re.search(PET, t, re.I) and not re.search(r"зовут|кличк|имени", t, re.I)), None)
@@ -1368,6 +1371,43 @@ class Skills:
             self._can_undo(lambda: (memory.forget(fact_id), self.brain.refresh_facts(), "Хорошо, это я забыл.")[2])
         self.brain.refresh_facts()
         return "Запомнил."
+
+    def do_age_fix(self, m, now):
+        """"Ей 12" after "у меня сестра Маша", "ему не десять а двенадцать", "Диме исполнилось 14": the age of the one meant
+        (the model said "обновляю информацию" and the old age stayed)."""
+        n = re.search(r"\d{1,3}", to_digits(m.slots.get("age", "")))
+        if n is None:
+            return None
+        n = int(n.group(0))
+        memory = self.brain.active
+        facts = memory.facts()
+        heard = normalize_low(self.heard)
+        he = re.search(r"(?<!\w)ему(?!\w)", heard)
+        she = re.search(r"(?<!\w)ей(?!\w)", heard)
+        name = normalize_low(m.slots.get("who", "")).split()
+        if name:
+            stem = name[-1][:3]
+            if len(stem) < 3:
+                return None
+            who = next(((i, t) for i, t in reversed(facts) if re.search(r"(?<!\w)%s" % re.escape(stem), normalize_low(t))
+                        and (re.search(PET, t, re.I) or re.search(r"зовут|друг|подруг", t, re.I))), None)
+        else:
+            kind = r"брат|пап|друг|кот|пес|пёс|хомяк|сын|дед" if he else r"сестр|мам|подруг|кошк|собак|дочь|бабушк"
+            who = next(((i, t) for i, t in reversed(facts) if re.search(kind, t, re.I)), None)
+        if who is None:
+            return None
+        pronoun = "ему" if he or re.search(r"брат|пап|друг|кот|пес|сын|дед", who[1], re.I) and not she else "ей"
+        years = plural(n, "год", "года", "лет")
+        text = to_digits(who[1])
+        if re.search(r"(?<!\w)(?:ему|ей)\s+\d{1,3}(?!\d)", text):  # "брат Дима ему 10": the age said without "лет"
+            fact = re.sub(r"(?<!\w)(ему|ей)\s+\d{1,3}(?:\s+(?:лет|года|год))?", r"\1 %d %s" % (n, years), text, count=1)
+        elif re.search(r"\d+\s+(?:лет|года|год)", text):
+            fact = re.sub(r"\d+\s+(?:лет|года|год)", "%d %s" % (n, years), text, count=1)
+        else:
+            fact = "%s, %s %d %s" % (text.rstrip(" ."), pronoun, n, years)
+        memory.update_fact(who[0], fact)
+        self.brain.refresh_facts()
+        return "Запомнил: %s." % to_you(fact).rstrip(".")
 
     def do_fact_fix(self, m, now):
         """"Нет, не синий, а зелёный", "на самом деле математика", "брату исполнилось 21": the saved fact changed
@@ -1410,6 +1450,18 @@ class Skills:
         query = m.slots.get("fact", "")
         memory = self.brain.active
         fact = self._best_fact(memory, query)
+        if fact is not None and re.search(r"\s+и\s+", fact[1]) and not re.search(r"(?<!\w)все|всё(?!\w)", query, re.I):
+            # "забудь, что я сдаю физику" of "Я сдаю физику и информатику": that part only (the informatics went too)
+            asked = _stems(re.sub(r"(?<!\w)(?:что|я|мне|меня|мой|моя|про|о|об)(?!\w)", " ", query, flags=re.I))
+            head, tail = re.match(r"(.*?\s)(\S+(?:\s+и\s+\S+)+)\s*$", fact[1]).groups() if re.match(
+                r"(.*?\s)(\S+(?:\s+и\s+\S+)+)\s*$", fact[1]) else (None, None)
+            if head:
+                parts = re.split(r"\s+и\s+", tail)
+                kept = [p for p in parts if not any(st in normalize_low(p) for st in asked)]
+                if 0 < len(kept) < len(parts):
+                    memory.update_fact(fact[0], head + " и ".join(kept))
+                    self.brain.refresh_facts()
+                    return "Забыл про %s." % " и ".join(p for p in parts if p not in kept)
         if fact is None:
             # "забудь про Тимура", told of in the talk but never saved: the talk forgets it (the model named him after
             # "Такого я не помню")
@@ -1805,6 +1857,8 @@ class Skills:
         what = " ".join(SPOKEN_FILLERS.sub(" ", what).split()).strip(" ,:;")
         if not re.search(r"\w", what):
             return None
+        if re.search(r"(?<![\d:])(?:2[4-9]|[3-9]\d)\s*(?:час\w*|:\d\d)", to_digits(what)):
+            return "Такого часа нет: в сутках их 24. Скажи время ещё раз."  # "в 25 часов сон" became a task «25:00 сон»
         # "через час и пятнадцать минут": 75 minutes (it was an hour, and «И 15 минут выпить воду»)
         hour_and = r"через\s+(?:1\s+|один\s+)?час\s+и\s+(\d+)\s+минут\w*"
         if re.search(hour_and, to_digits(what), re.I):
@@ -1997,6 +2051,18 @@ class Skills:
         return "Отметил сделанными: %s." % "; ".join("«%s»" % i["title"] for i in items)
 
     def do_plan_rename(self, m, now):
+        if m.template.startswith("(поменяй|измени|смени) (мой"):
+            # "поменяй мой любимый цвет на красный": the fact whose words these are (it went to the plans: "не нашёл")
+            memory = self.brain.active
+            stems = _stems(m.slots.get("what", ""))
+            fact = next(((i, t) for i, t in memory.facts() if stems and all(st in normalize_low(t) for st in stems)), None)
+            if fact is None:
+                return "Такого я о тебе не помню: скажи «мой … — это …», и запомню."
+            head = re.match(r"(?i)(.*?%s\w*\s+(?:это\s+|—\s*)?)" % re.escape(stems[-1]), fact[1])
+            new = (head.group(1) if head else fact[1] + " ") + m.slots["name"].strip(" .!")
+            memory.update_fact(fact[0], new)
+            self.brain.refresh_facts()
+            return "Запомнил: %s." % to_you(new).rstrip(".")
         if self.planner is None:
             return None
         item, problem = self._item(m.slots.get("what", ""), strict=True)
@@ -2107,7 +2173,7 @@ class Skills:
         if m.template.startswith("[а|и|нет|не] (ее|") and not (when_only(to) or shift_of(to_digits(to))):
             return None  # "а его зовут Тимур": no day or time
         no_verb = m.template.startswith(("[а|и] {what} (давай", "[а|и] {what} не (в", "сделай {what}", "[а] {what} {to}",
-                                         "[а|и] {what} на {to}", "[а] {what} (переезжает"))
+                                         "[а|и] {what} на {to}", "[а] {what} (переезжает", "[а] {what} [теперь] (начнется"))
         if m.template.startswith("[а] {what} (переезжает"):
             part = re.match(r"^\s*(?:на\s+)?(вечер|утро|день)\s+(?:часов\s+)?на\s+(\S+)", to, re.I)
             if part:  # "на вечер часов на 7": 19:00, not 07:00
@@ -2117,7 +2183,7 @@ class Skills:
             to = "на " + to
         named = re.sub(r"(?<!\w)(?:нет|не|ой|да|ну|блин|лучше|давай|хотя|а|и|вот|так)(?!\w)", " ", what, flags=re.I)
         if no_verb and ("?" in self.heard or not re.search(r"\w{2,}", named)
-                        or not when_only(re.sub(r"\s+(?:перенес[её]м|поставим)$", "", to))):
+                        or not (when_only(re.sub(r"\s+(?:перенес[её]м|поставим)$", "", to)) or shift_of(to_digits(to)))):
             return None  # "а ЕГЭ на завтра?" asks; "сделай музыку громче" is no time
         to = re.sub(r"\s+(?:перенес[её]м|поставим)$", "", to)
         if m.slots.get("span"):
@@ -2191,6 +2257,19 @@ class Skills:
         self._undo_move(before, answer)
         return _say(answer)
 
+    def do_plan_reminders(self, m, now):
+        """"Какие у меня напоминания?": the plans that have one (the model read out the plans)."""
+        if self.planner is None:
+            return None
+        today = now.date()
+        items = [i for i in self.planner.planner.items(today, today + timedelta(days=30)) if i.get("remind") is not None and not i["done"]]
+        if not items:
+            return "Напоминаний нет."
+        return "Напомню: %s." % "; ".join("о «%s» — за %s, %s в %s" % (
+            i["title"], _minutes_said(i["remind"]), self._when(
+                date.fromisoformat(i["date"]), date.fromisoformat(i["date"]), today), i.get("start_time") or "")
+            for i in items[:6])
+
     def do_plan_remind(self, m, now):
         """"Напомни завтра за час до хакатона": the plan's own reminder, that much before it (it made a task
         «За час до хакатона»)."""
@@ -2210,7 +2289,7 @@ class Skills:
         saved = {k: v for k, v in dict(item, remind=minutes).items() if k != "updated_at"}
         self.planner.planner.save(saved)
         self.planner.focus = [saved]
-        return "Напомню за %d %s до «%s»: %s в %s." % (minutes, plural(minutes, "минуту", "минуты", "минут"), item["title"],
+        return "Напомню за %s до «%s»: %s в %s." % (_minutes_said(minutes), item["title"],
                                                      spoken_day(date.fromisoformat(item["date"]), now.date()), item["start_time"])
 
     def do_plan_fix(self, m, now):
@@ -2389,12 +2468,20 @@ class Skills:
             planner.planner.save(old)
             planner.focus = [old]
             return "Вернул как было: %s — %s." % (spoken_day(date.fromisoformat(old["date"]), planner.today()), spoken_item(old))
+        back.title = old["title"]  # "верни хакатон": this move, not the last one made
         self._can_undo(back)
 
     def do_undo(self, m, now):
         what = m.slots.get("what", "")
         if what and self.planner is not None and self.planner.deleted:  # "верни русский"
             return _say(self.planner.restore(what))
+        if what and self.undo_stack:
+            # "верни хакатон" after moving the hackathon and then the physics: the hackathon's (the physics came back)
+            stems = _stems(what)
+            for k in range(len(self.undo_stack) - 1, -1, -1):
+                title = getattr(self.undo_stack[k], "title", "")
+                if stems and title and all(st in normalize_low(title) for st in stems):
+                    return self.undo_stack.pop(k)()
         if self.undo_stack:
             return self.undo_stack.pop()()
         if self.planner is not None and self.planner.deleted:  # deleted by the model's own tool

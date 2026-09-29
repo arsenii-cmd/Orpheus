@@ -561,6 +561,11 @@ class PlannerTools:
         part = re.fullmatch(r"\s*(?:на\s+)?(утро|утром|обед|вечер|вечером|ночь|ночью)\s*", to, re.I)
         if part:  # "поменяй встречу на вечер": an hour of that part of the day
             to = "в " + PART_HOURS[part.group(1).lower()[:3]]
+        elif not re.search(r"\d", to):
+            # "перенеси физику на сегодня на вечер": the day and a part of it ("и так сегодня" - the part was lost)
+            inner = re.search(r"(?<!\w)(?:на\s+)?(утро|утром|обед|вечер|вечером|ночь|ночью)(?!\w)", to, re.I)
+            if inner:
+                to = to.replace(inner.group(0), " в " + PART_HOURS[inner.group(1).lower()[:3]])
         span = time_span(to)
         if span and item["kind"] == "event":  # "сделай тренировку с 7 до 8", "перенеси тренировку на завтра с 7 до 8"
             days = period(TIME_SPAN.sub(" ", to), today) if _has_day(to) else None
