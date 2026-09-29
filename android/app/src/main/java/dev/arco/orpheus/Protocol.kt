@@ -54,6 +54,7 @@ object Protocol {
             "audio" -> ServerMessage.AudioStart(o.optInt("sample_rate", 22_050), id)
             "audio_end" -> ServerMessage.AudioEnd(
                 o.optBoolean("expect_reply", false), o.optBoolean("listen", true), o.optBoolean("pause", false), id,
+                notOwner = o.optString("reason") == "not_owner",
             )
             "error" -> ServerMessage.Error(o.optString("message", "ошибка сервера"), id)
             "mode" -> ServerMessage.Mode(o.optBoolean("personal", false))
@@ -76,7 +77,11 @@ sealed interface ServerMessage {
     data class AudioStart(val sampleRate: Int, val id: Int? = null) : ServerMessage
     /** [listen]: false after «Стоп»/«Хватит» or a phrase with no words - back to waiting for «Орфей»;
      *  [pause]: «Орфей, не слушать» - not even the wake word until a button is pressed. */
-    data class AudioEnd(val expectReply: Boolean, val listen: Boolean = true, val pause: Boolean = false, val id: Int? = null) : ServerMessage
+    data class AudioEnd(
+        val expectReply: Boolean, val listen: Boolean = true, val pause: Boolean = false, val id: Int? = null,
+        /** "reason": "not_owner" - the voice was not taken for the owner's (strict): no answer to it. */
+        val notOwner: Boolean = false,
+    ) : ServerMessage
     data class Error(val message: String, val id: Int? = null) : ServerMessage
     /** Which section the server is in; it may change by voice or after a long silence too. */
     data class Mode(val personal: Boolean) : ServerMessage

@@ -253,6 +253,15 @@ SEARCH_DOWN = ("поиск в интернете не ответил, и это 
                "проверить это сейчас не получится")
 
 
+# "Забавно. Расскажи последние новости…": a reaction to the last answer, then the request - the reaction alone
+# made the phrase no scenario's (the model answered, and searched nothing)
+REACTION = re.compile(r"^\W*(?:(?:ну|очень|как|вот)\s+)?(?:забавно|интересно|понятно|ясно|круто|класс|классно|здорово|ого|вау|"
+                      r"прикольно|отлично|супер|понял|поняла|спасибо|благодарю|жаль|обидно|смешно|любопытно|неплохо|"
+                      r"вот\s+как|вот\s+оно\s+что)[.!…]+\s+(?=\w)", re.I)
+# "какие новости?" - "Блокировки VPN.": the topic alone, after news: the news about it
+NEWS = re.compile(r"(?<!\w)новост", re.I)
+
+
 def search_query(text):
     return ASKING.sub("", text).strip(" ?.!,") or text.strip(" ?.!,")
 
@@ -516,6 +525,9 @@ class Skills:
         awaiting, self.awaiting = self.awaiting, None
         if awaiting and awaiting[0] == self.turn - 1 and when_only(text):
             return self._dispatch("добавь %s %s" % (text.strip(" .!"), awaiting[1]), now)  # "На когда?" - "Завтра в 12."
+        reaction = REACTION.match(text)
+        if reaction:
+            text = self.heard = text[reaction.end():]
         if HESITATION.match(text):  # "э-э", "хм": thinking aloud, not a request
             self.handled = "ack"
             return ""
@@ -659,6 +671,9 @@ class Skills:
             return "сколько дней %s" % frag if re.match(r"до\s+\w", low) else None
         if intent == "rate":  # "какой курс доллара?" - "а евро?"
             return "какой курс %s" % frag if currencies(frag) and len(frag.split()) <= 3 else None
+        if intent == "fresh" and NEWS.search(prev) and not QUESTION.search(text) and len(frag.split()) <= 5 \
+                and not TO_ME.search(text) and not ABOUT_THAT.search(frag):
+            return "новости про %s" % frag
         if intent in ("web_search", "fresh"):
             # "найди, когда выйдет GTA 6" - "а сколько она будет стоить?": the model, asked this, said it
             # could not find it (searching nothing); searched again, with what the last search was about

@@ -33,7 +33,7 @@ class ProtocolTest {
             Protocol.parse("""{"type":"enroll","count":2,"needed":5,"mode":"log","error":"слишком коротко"}"""),
         )
         // a stranger's phrase: the server stays silent, the phone goes back to waiting for «Орфей»
-        assertEquals(ServerMessage.AudioEnd(false, false, false), Protocol.parse("""{"type":"audio_end","expect_reply":false,"listen":false,"reason":"not_owner"}"""))
+        assertEquals(ServerMessage.AudioEnd(false, false, false, notOwner = true), Protocol.parse("""{"type":"audio_end","expect_reply":false,"listen":false,"reason":"not_owner"}"""))
     }
 
     @Test fun helloCarriesThePersonalKeyOnlyWhenThereIsOne() {

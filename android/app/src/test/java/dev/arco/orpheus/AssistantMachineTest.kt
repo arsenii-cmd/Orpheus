@@ -71,7 +71,7 @@ class AssistantMachineTest {
     @Test fun talkInterruptsTheReply() {
         on()
         m.handle(Event.WakeWord, 0); m.handle(Event.SpeechEnded, 1_000); m.handle(Event.ReplyAudio, 2_000)
-        assertEquals(listOf(Effect.StopPlayback, Effect.Play(Earcon.Start), Effect.StartUtterance(false)), m.handle(Event.Talk, 3_000))
+        assertEquals(listOf(Effect.StopPlayback, Effect.Play(Earcon.Start), Effect.StartUtterance(false, byHand = true)), m.handle(Event.Talk, 3_000))
         assertEquals(Phase.Listening, m.phase)
     }
 
@@ -140,5 +140,21 @@ class AssistantMachineTest {
         m.handle(Event.ReplyDone(false, listen = false, pause = true), 2_000)
         m.handle(Event.Talk, 3_000)
         assertEquals(Phase.Listening, m.phase)
+    }
+
+    @Test fun aConversationOpenedByHandIsTheOwnersFollowUpsToo() {
+        // a touch on the owner's buds: their voice was once taken for another's (0.43) and not answered
+        on()
+        assertEquals(listOf(Effect.Play(Earcon.Start), Effect.StartUtterance(false, byHand = true)), m.handle(Event.Talk, 1_000))
+        m.handle(Event.SpeechEnded, 3_000)
+        m.handle(Event.ReplyDone(false), 4_000)
+        assertEquals(listOf(Effect.StartUtterance(true, byHand = true)), m.handle(Event.SpeechStarted, 5_000))
+        m.handle(Event.SpeechEnded, 7_000)
+        m.handle(Event.ReplyDone(false, listen = false), 8_000)
+        // the next one by «Орфей»: a voice again, checked
+        assertEquals(listOf(Effect.Play(Earcon.Start), Effect.StartUtterance(false)), m.handle(Event.WakeWord, 9_000))
+        m.handle(Event.SpeechEnded, 11_000)
+        m.handle(Event.ReplyDone(false), 12_000)
+        assertEquals(listOf(Effect.StartUtterance(true)), m.handle(Event.SpeechStarted, 13_000))
     }
 }

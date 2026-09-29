@@ -368,7 +368,8 @@ class OrpheusService : Service() {
                 phraseId++
                 link.send(Protocol.start(
                     effect.followUp, settings.voice, enroll = Bus.enroll.value.recording,
-                    headset = buds, strict = buds && settings.headsetStrict, id = phraseId,
+                    // a conversation opened by the owner's hand (a touch on their buds, the button) is theirs: only a voice's is checked
+                    headset = buds, strict = buds && settings.headsetStrict && !effect.byHand, id = phraseId,
                 ))
                 streamFrom = pendingFrom
                 pendingFrom = NOW
@@ -415,6 +416,11 @@ class OrpheusService : Service() {
                 dispatch(Event.ReplyAudio)
             }
             is ServerMessage.AudioEnd -> {
+                if (message.notOwner) {
+                    // said, heard and not answered: without a sound it looked like Orpheus had hung
+                    if (settings.earcons) Earcons.play(Earcon.NotOwner)
+                    Bus.problem.value = "Не узнал голос — повтори"
+                }
                 val done = Event.ReplyDone(message.expectReply, message.listen, message.pause)
                 when (phase) {
                     Phase.Speaking -> player.end(done)

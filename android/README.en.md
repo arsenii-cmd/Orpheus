@@ -22,7 +22,8 @@ Everything except the wake word is done by the server; the protocol is in
 - **Earbud microphone.** With Bluetooth earbuds connected the app listens through them, so the phone
   can stay in your pocket.
 - **Strict mode with earbuds.** With earbuds on, Orpheus answers only the owner's voice; without
-  them, everyone. The voice is enrolled in "Settings → My voice": five phrases read aloud.
+  them, everyone. A conversation opened by the earbud touch or the button isn't checked: the owner
+  opened it. When a voice isn't recognised, a short falling cue sounds — worth repeating. The voice is enrolled in "Settings → My voice": five phrases read aloud.
 - **"Personal".** A button opens a section with a separate encrypted memory; its key is kept in the
   Android Keystore and handed to the server only when connecting.
 - Speak the command right away, without a pause: «Орфей, какая погода». Everything said after the

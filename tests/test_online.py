@@ -639,3 +639,27 @@ def test_the_day_summary_has_the_weather_at_home():
     brain = make()
     assert say(brain, "Доброе утро.") == ("Добрый день! Сегодня пятница, 25 сентября. "
                                          "Сегодня в Москве от +8 до +16, переменная облачность; сейчас +13.")
+
+
+def test_news_after_a_reaction_and_then_a_topic_alone_are_searched():
+    # a talk by the buds: "Забавно." before the request made it the model's, and it searched nothing;
+    # then it asked for a topic, promised "Я найду информацию о блокировках VPN" and searched nothing again
+    brain = make(replies=[text("Вот главное за сегодня."), text("Про блокировки VPN вот что.")])
+    say(brain, "Забавно. Расскажи последние новости, которые ты нашёл в интернете.")
+    assert brain.calls[-1][0] == "web_search" and "новости" in brain.calls[-1][1]["query"]
+    say(brain, "Блокировки VPN.")
+    assert brain.calls[-1] == ("web_search", {"query": "новости про Блокировки VPN"})
+
+
+def test_find_information_promised_is_a_search_made():
+    brain = make(replies=[text("Я найду информацию о блокировках VPN прямо сейчас."), text("Вот что нашлось.")])
+    reply = say(brain, "Что с блокировками VPN?")
+    assert reply.endswith("Вот что нашлось.")
+    assert brain.calls[-1][0] == "web_search"
+
+
+def test_news_about_a_topic_without_asking_words():
+    for phrase in ("Новости про блокировки VPN", "Что нового про Starship?", "Что нового в интернете?"):
+        brain = make(replies=[text("Вот.")])
+        say(brain, phrase)
+        assert brain.calls and brain.calls[-1][0] == "web_search", phrase

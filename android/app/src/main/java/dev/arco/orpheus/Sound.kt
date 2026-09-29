@@ -150,6 +150,7 @@ object Earcons {
         Earcon.Cancel to tone(440.0 to 120, volume = 0.18),
         Earcon.Error to tone(330.0 to 110, 0.0 to 50, 330.0 to 160),
         Earcon.Thinking to tone(740.0 to 35, volume = 0.08),  // a soft tick while the reply is thought of
+        Earcon.NotOwner to tone(520.0 to 90, 0.0 to 40, 390.0 to 90, 0.0 to 40, 290.0 to 160),  // "didn't know the voice"
     )
 
     fun play(earcon: Earcon) {

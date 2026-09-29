@@ -7,7 +7,7 @@ package dev.arco.orpheus
  */
 enum class Phase { Off, Wake, Listening, Thinking, Speaking, FollowUp, Paused }
 
-enum class Earcon { Start, Done, Cancel, Error, Thinking }
+enum class Earcon { Start, Done, Cancel, Error, Thinking, NotOwner }
 
 sealed interface Event {
     data object Enable : Event
@@ -31,8 +31,9 @@ sealed interface Event {
 }
 
 sealed interface Effect {
-    /** Send "start" and begin streaming the microphone (with the audio already buffered). */
-    data class StartUtterance(val followUp: Boolean) : Effect
+    /** Send "start" and begin streaming the microphone (with the audio already buffered). [byHand]: the
+     *  conversation was opened by a hand (the buds' touch, the talk button), not by a voice: the owner's. */
+    data class StartUtterance(val followUp: Boolean, val byHand: Boolean = false) : Effect
     data object FinishUtterance : Effect
     data object CancelUtterance : Effect
     data object StopPlayback : Effect
@@ -61,6 +62,7 @@ class AssistantMachine(var config: MachineConfig = MachineConfig()) {
 
     private var since = 0L        // when the current phase began
     private var heardSpeech = false
+    private var byHand = false    // this conversation was opened by a hand, not by «Орфей» (its follow-ups too)
     private var tickedAt = 0L     // the last "thinking" tick
 
     /** Whether a SpeechStarted in FollowUp should count yet (see [MachineConfig.followUpGraceMs]).
@@ -79,12 +81,19 @@ class AssistantMachine(var config: MachineConfig = MachineConfig()) {
                 }
                 go(Phase.Off, now)
             }
-            Event.WakeWord -> if (phase == Phase.Wake) startListening(now, followUp = false, effects)
+            Event.WakeWord -> if (phase == Phase.Wake) {
+                byHand = false
+                startListening(now, followUp = false, effects)
+            }
             Event.Resume -> if (phase == Phase.Paused) go(Phase.Wake, now)
             Event.Talk -> when (phase) {
-                Phase.Wake, Phase.FollowUp, Phase.Paused -> startListening(now, followUp = false, effects)
+                Phase.Wake, Phase.FollowUp, Phase.Paused -> {
+                    byHand = true
+                    startListening(now, followUp = false, effects)
+                }
                 Phase.Speaking -> {
                     effects += Effect.StopPlayback
+                    byHand = true
                     startListening(now, followUp = false, effects)
                 }
                 else -> {}
@@ -94,7 +103,7 @@ class AssistantMachine(var config: MachineConfig = MachineConfig()) {
                 Phase.FollowUp -> if (followUpArmed(now)) {
                     go(Phase.Listening, now)
                     heardSpeech = true
-                    effects += Effect.StartUtterance(followUp = true)
+                    effects += Effect.StartUtterance(followUp = true, byHand = byHand)
                 }
                 else -> {}
             }
@@ -154,7 +163,7 @@ class AssistantMachine(var config: MachineConfig = MachineConfig()) {
     private fun startListening(now: Long, followUp: Boolean, effects: MutableList<Effect>) {
         go(Phase.Listening, now)
         effects += Effect.Play(Earcon.Start)
-        effects += Effect.StartUtterance(followUp)
+        effects += Effect.StartUtterance(followUp, byHand)
     }
 
     private fun finishListening(now: Long, effects: MutableList<Effect>) {
