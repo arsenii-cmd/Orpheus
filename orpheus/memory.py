@@ -213,6 +213,20 @@ class Memory:
         self._index("turn", turn_id, "%s — %s" % (user, reply))
         return turn_id
 
+    def forget_turns(self, stem):
+        """Past exchanges that mention [stem] (a word's start), gone: "забудь про Тимура" said of a name never
+        saved as a fact, which the talks still had. -> how many."""
+        stem = stem.lower().replace("ё", "е")
+        ids = [r["id"] for r in self.db.execute("SELECT id, user, reply FROM turns")
+               if re.search(r"(?<!\w)" + re.escape(stem), (r["user"] + " " + r["reply"]).lower().replace("ё", "е"))]
+        with self.db:
+            for turn_id in ids:
+                self.db.execute("DELETE FROM turns WHERE id = ?", (turn_id,))
+                self.db.execute("DELETE FROM turns_fts WHERE rowid = ?", (turn_id,))
+                self.db.execute("DELETE FROM vectors WHERE kind = 'turn' AND ref_id = ?", (turn_id,))
+        self._matrix = None
+        return len(ids)
+
     def turns(self, limit=20):
         return [dict(r) for r in self.db.execute("SELECT * FROM turns ORDER BY id DESC LIMIT ?", (limit,))]
 
@@ -322,7 +336,8 @@ class SealedMemory(Memory):
     """The same memory, kept on disk only encrypted (see secure.py): opened into RAM with the key,
     and written back, sealed, after every change."""
 
-    WRITES = ("remember", "update_fact", "forget", "add_note", "update_note", "delete_note", "add_turn", "reindex")
+    WRITES = ("remember", "update_fact", "forget", "add_note", "update_note", "delete_note", "add_turn", "forget_turns",
+              "reindex")
 
     def __init__(self, path: Path | str, key: bytes, embedder=None):
         from .secure import unseal

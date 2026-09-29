@@ -227,3 +227,12 @@ def test_words_after_a_tool_round_are_spaced_from_those_before():
                             {"message": {"content": "", "tool_calls": [{"function": {"name": "find_notes", "arguments": {"query": "x"}}}]}},
                             {"done": True}]
     assert "".join(brain.ask("что там было", now=NOW)) == "Позвольте поискать. Нашёл."
+
+
+def test_a_day_named_brings_its_plans_along():
+    # "бла бла карандаш вторник": "на сегодня событий нет", with nothing looked at
+    from test_planner import tools
+    brain = Brain(Config(), Memory(":memory:"), FakeLLM(text("Не совсем понял.")),
+                  planner=tools({"id": "f", "kind": "event", "title": "Физика", "date": "2026-09-25", "start_time": "12:00"}))
+    list(brain.ask("бла бла карандаш пятница", now=NOW))
+    assert "Физика" in brain.llm.requests[0][-1]["content"]

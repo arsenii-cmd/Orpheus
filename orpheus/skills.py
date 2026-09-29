@@ -104,6 +104,10 @@ NOT_PLANS = re.compile(r"(?<!\w)(?:я|мы)\s+(?:уже\s+)?передумал\w
 # "Напомни, какое сегодня число": a question, not a reminder (a task «Какое число» was added)
 REMIND_ASKS = re.compile(r"^\W*(?:напомни|напомните)(?:\s+мне)?[\s,:—-]+(?=(?:(как\w*|кто|кого|кому|где|куда|когда|сколько|почему|"
                          r"зачем|чей|чья|чье|чьи|во\s+сколько|о\s+ч[её]м)|что|чт[оа]|про|об?|чем)(?!\w))", re.I)
+# "напомни, что я хотел на выходных": what the speaker said or meant before - a question about it, a day named or not
+# (it became a task «Я хотел на выходных»)
+REMIND_PAST = re.compile(r"^\W*(?:напомни|напомните)(?:\s+мне)?[\s,:—-]+(?:что|о\s+ч[её]м|про\s+что)\s+(?:я|мы)\s+(?:\w+\s+)?"
+                         r"(?:хотел|говорил|собирал|думал|планировал|рассказывал|обещал|решил|придумал|спрашивал)\w*", re.I)
 # said as it is spoken: "че у меня на завтра", "сколько щас времени"
 COLLOQUIAL = [(re.compile(r"(?<!\w)(?:че|чё|чо|шо)(?!\w)", re.I), "что"), (re.compile(r"(?<!\w)щас(?!\w)", re.I), "сейчас"),
               (re.compile(r"(?<!\w)скок[оа]?(?!\w)", re.I), "сколько"), (re.compile(r"(?<!\w)ваще(?!\w)", re.I), "вообще")]
@@ -260,6 +264,10 @@ REACTION = re.compile(r"^\W*(?:(?:ну|очень|как|вот)\s+)?(?:заба
                       r"вот\s+как|вот\s+оно\s+что)[.!…]+\s+(?=\w)", re.I)
 # "какие новости?" - "Блокировки VPN.": the topic alone, after news: the news about it
 NEWS = re.compile(r"(?<!\w)новост", re.I)
+
+
+PART_OF_DAY = re.compile(r"(?<!\w)(?:с\s+)?(утром|утра|вечером|днём|днем)(?!\w)(?!\s+(?:в|к)\s+\d)", re.I)
+PART_TIME = {"утр": "9:00", "веч": "19:00", "днё": "13:00", "дне": "13:00"}
 
 
 def search_query(text):
@@ -504,7 +512,7 @@ class Skills:
         # "напомни, какое сегодня число": a question whatever it names; "напомни, что я говорил про Виктора" too,
         # but "напомни, что завтра в 10 врач" is a reminder
         self.rewritten = None
-        if asks and (asks.group(1) or not (_has_day(text) or _has_time(text))):
+        if asks and (asks.group(1) or REMIND_PAST.match(text) or not (_has_day(text) or _has_time(text))):
             text = self.rewritten = text[asks.end():]  # the model gets it so too: a question, not about its memory
         self.heard = text
         self.handled = None
@@ -1050,7 +1058,11 @@ class Skills:
         memory = self.brain.active
         fact = self._best_fact(memory, query)
         if fact is None:
-            return "Такого я не помню."
+            # "забудь про Тимура", told of in the talk but never saved: the talk forgets it (the model named him after
+            # "Такого я не помню")
+            stems = [w[:max(4, len(w) - 2)] for w in re.findall(r"\w{4,}", query) if not re.fullmatch(r"(?:всё|все|это|того|этого|пожалуйста)", w, re.I)]
+            gone = sum(self.brain.forget_said(s) + memory.forget_turns(s) for s in stems[:3])
+            return "Хорошо, забыл." if gone else "Такого я не помню."
         fact_id, text = fact
         memory.forget(fact_id)
         # the facts the model reads are the memory's again: told "забудь", it kept saying it for the rest of
@@ -1360,6 +1372,9 @@ class Skills:
         what = " ".join(SPOKEN_FILLERS.sub(" ", what).split()).strip(" ,:;")
         if not re.search(r"\w", what):
             return None
+        # "напомни завтра утром сдать долг": a time of day, not a word of the title (it became «Утром сдать долг»)
+        if not _has_time(what):
+            what = PART_OF_DAY.sub(lambda p: " в %s " % PART_TIME[p.group(1).lower()[:3]], what, count=1).strip()
         pieces = re.split(r"\s*[,;]\s*(?=(?:в|к)\s+\d)|\s+и\s+(?=(?:в|к)\s+\d)", to_digits(what))
         if len(pieces) > 1 and all(re.search(r"(?:^|\s)(?:в|к)\s+\d", p) for p in pieces) and not REPEAT_WEEK.search(what):
             return self._add_several(pieces)
@@ -1510,6 +1525,8 @@ class Skills:
         # "отметь, что я купил хлеб": the title is "хлеб", not "что я купил"
         what = re.sub(r"^(?:что|то,?\s+что)\s+(?:я\s+|мы\s+)?(?:уже\s+)?(?:\w+(?:л|ла|ли)\s+)?", "",
                       m.slots.get("what", "").strip(), flags=re.I)
+        # "отметь, что хлеб купил": the verb after it
+        what = re.sub(r"\s+(?:уже\s+)?\w+(?:ил|ал|ял|ел|ыл|ул|ла|ли)$", "", what, flags=re.I) if len(what.split()) > 1 else what
         item, problem = self._item(what, strict=True)
         if item is None:
             # "ужин готов" is not about the plans when there is nothing like it there
@@ -1649,6 +1666,8 @@ class Skills:
         what = " ".join(re.sub(r"(?<!\w)(?:лучше|тогда|пожалуй|уж|же|тоже|все\s+же|всё\s+же)(?!\w)", " ", what, flags=re.I).split())
         if m.template.startswith("[а|и] {what} (тогда") and not when_only(to):
             return None  # "а я тогда на работу": no time
+        if m.template.startswith("[а|и|нет|не] (ее|") and not (when_only(to) or shift_of(to_digits(to))):
+            return None  # "а его зовут Тимур": no day or time
         if m.slots.get("span"):
             to = "с " + m.slots["span"]
             if planner_time_span(to_digits(to)) is None:
@@ -1673,6 +1692,7 @@ class Skills:
                 return None if loose else _say(problem)
         planner = self.planner
         answer = planner.move_item(item, to, whole=whole)
+        self._undo_move(item, answer)
         if planner.replaced and answer.startswith("Перенёс") and "все повторы" in answer:
             before = list(planner.replaced)
             self._can_undo(lambda: ([planner.planner.save({k: v for k, v in i.items() if k != "updated_at"}) for i in before],
@@ -1688,7 +1708,10 @@ class Skills:
             return None
         if not when_only(m.slots.get("to", "")):
             return None
-        return _say(planner.move_item(planner.focus[0], m.slots.get("to", "")))
+        before = planner.focus[0]
+        answer = planner.move_item(before, m.slots.get("to", ""))
+        self._undo_move(before, answer)
+        return _say(answer)
 
     def do_plan_delete(self, m, now):
         if self.planner is None:
@@ -1780,6 +1803,19 @@ class Skills:
         return self._ask("Удалить все повторы «%s» с %d %s — %d %s?" % (
             item["title"], first.day, MONTHS[first.month - 1], len(items), plural(len(items), "раз", "раза", "раз")), delete)
 
+    def _undo_move(self, before, answer):
+        """A move is undone by "верни как было" too ("нет, верни обратно" after one got "я ничего не удалял")."""
+        if not answer.startswith(("Перенёс на", "Теперь")) or "все повторы" in answer:
+            return  # a series' own undo is kept by do_plan_move
+        planner = self.planner
+        old = {k: v for k, v in before.items() if k != "updated_at"}
+
+        def back():
+            planner.planner.save(old)
+            planner.focus = [old]
+            return "Вернул как было: %s — %s." % (spoken_day(date.fromisoformat(old["date"]), planner.today()), spoken_item(old))
+        self._can_undo(back)
+
     def do_undo(self, m, now):
         what = m.slots.get("what", "")
         if what and self.planner is not None and self.planner.deleted:  # "верни русский"
@@ -1788,7 +1824,7 @@ class Skills:
             return self.undo_stack.pop()()
         if self.planner is not None and self.planner.deleted:  # deleted by the model's own tool
             return _say(self.planner.restore())
-        return "Возвращать нечего: я ничего не удалял."
+        return "Возвращать нечего: я ничего не менял."
 
     # ---------------------------------------------------------------------------------- talk
 
@@ -1853,11 +1889,12 @@ class Skills:
     def do_ack(self, m, now):
         if self.brain.last_reply.rstrip().endswith("?"):
             return None  # the model asked something: "да"/"нет" is its answer, the model's to take
-        return ""
+        # "нет" to "Скажи, за какой день удалить всё": silence sounded like nothing was heard
+        return "Хорошо." if NO.search(self.heard) else ""
 
     def do_how_are_you(self, m, now):
-        return self.rng.choice(["Все системы в норме, спасибо. Чем займёмся?", "Работаю исправно, как и положено. Что нужно?",
-                                "Отлично, спасибо, что спросил. Что на повестке?"])
+        return self.rng.choice(["Все системы в норме, спасибо. А у тебя?", "Работаю исправно, жалоб не поступало. Как ты?",
+                                "Отлично, спасибо, что спросил. Как твой день?", "Лучше не бывает — по крайней мере, у программ."])
 
     def do_who(self, m, now):
         return "Я Орфей, твой личный голосовой ассистент."
@@ -2167,6 +2204,8 @@ class Skills:
         return "Музыку включать я пока не умею."
 
     def do_call(self, m, now):
+        if re.search(r"такси", self.heard, re.I):
+            return "Такси вызывать я пока не умею."
         return "Звонить я пока не умею."
 
     def do_message(self, m, now):

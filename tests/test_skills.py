@@ -1180,3 +1180,35 @@ def test_a_move_to_where_it_already_is_says_so():
     assert reply.startswith("«Тренировка» и так") and "четверг" in reply and "19:00" in reply
     assert say(brain, "Перенеси тренировку на 19.").startswith("«Тренировка» и так")
     assert say(brain, "Перенеси её на пятницу.").startswith("Перенёс на")  # "её": the one just named
+
+
+def test_remind_what_i_wanted_is_a_question_not_a_task():
+    # a talk with the model: "напомни что я хотел на выходных" became a task «Я хотел на выходных»
+    brain = make(replies=[text("Ты думал о горах или кино.")])
+    assert say(brain, "напомни что я хотел на выходных") == "Ты думал о горах или кино."
+    assert brain.handled == "модель"
+    assert not [i for i in brain.skills.planner.planner.rows.values() if "хотел" in i["title"].lower()]
+
+
+def test_what_a_talk_with_him_showed_the_second_time():
+    # a talk by an agent: "а её на час позже", "не верни как было" went to the model, which said "перенесу на 20:00",
+    # "удалена и добавлена", "восстанавливаю" and did none of it (the fake planner answers any add with 12:00 «Созвон»)
+    brain = make()
+    say(brain, "слушай добавь мне тренировку завтра в 7 вечера")
+    assert say(brain, "а её на час позже").startswith("Перенёс на") and "13:00" in brain.last_reply
+    assert say(brain, "не верни как было").startswith("Вернул как было") and "12:00" in brain.last_reply
+    assert brain.skills.planner.planner.rows["new"]["start_time"] == "12:00"
+    say(brain, "напомни завтра утром сдать долг по физике")
+    assert "в 9:00" in brain.skills.planner.planner.quick_text and "утром" not in brain.skills.planner.planner.quick_text.lower()
+    brain = make({"id": "h", "kind": "task", "title": "Купить хлеб", "date": "2026-09-25"})
+    assert say(brain, "отметь что хлеб купил").startswith("Отметил")
+    assert say(brain, "вызови такси") == "Такси вызывать я пока не умею."
+
+
+def test_forget_what_was_only_said_in_the_talk():
+    # "моего друга зовут Тимур" (never saved), "забудь про Тимура" -> "Такого я не помню", and he named him after
+    brain = make(replies=[text("Понял, Тимур."), text("Не знаю.")])
+    say(brain, "моего друга зовут Тимур")
+    assert say(brain, "забудь про Тимура") == "Хорошо, забыл."
+    say(brain, "как зовут моего друга")
+    assert not any("Тимур" in str(m.get("content")) for m in brain.llm.requests[-1] if m["role"] != "system")
