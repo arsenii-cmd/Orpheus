@@ -398,6 +398,10 @@ class PlannerTools:
         span = period(self.heard, self.today()) if re.search(r"\w", self.heard) else None
         default = span[0] if span and span[0] == span[1] and span[0] != self.today() else None
         item = self.planner.quick(text, default)
+        if re.search(r"напомн", self.heard, re.I) and item.get("start_time") and item.get("remind") not in (None, 0):
+            item = dict(item, remind=0)  # "напомни через 10 минут": at that time, not 15 minutes before it (already past)
+            item.pop("updated_at", None)
+            self.planner.save(item)
         title = tidy_title(item["title"])
         if len(re.sub(r"\W", "", title)) < 2:
             # "напомни через 20 минут" with nothing to remind of made an event «В»
@@ -590,7 +594,8 @@ class PlannerTools:
         to = clean_quick(to, now if on <= now.date() else datetime.combine(on, datetime.min.time()), keep_weekdays=True)
         span = period(to, today) if re.search(r"[а-я]{3}|\d[./]\d", to, re.I) else None
         _, time = self._named(to, heard=False)
-        if time and item.get("start_time") and not re.search(r"утр|вечер|дня|ноч|\d:\d\d|полдень|полночь", said_to, re.I):
+        if time and item.get("start_time") and not re.search(r"утр|вечер|дня|ноч|\d:\d\d|полдень|полночь", said_to, re.I) \
+                and not _has_day(said_to):  # "перенеси русский на завтра на 9": another day, the hour as said
             # "русский не в шесть а в семь" of the 18:00 lesson: 19:00, the one nearer to it (it was 07:00)
             h, mm = map(int, time.split(":"))
             old = int(item["start_time"][:2])
