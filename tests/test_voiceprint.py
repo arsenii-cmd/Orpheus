@@ -128,12 +128,18 @@ class FakeVoice:
 
 
 def fake_orpheus(check):
+    from orpheus.heavy import LocalHeavy
+    from orpheus.voiceprint import NEEDED
+    heavy = LocalHeavy.__new__(LocalHeavy)
+    heavy.recognizer = FakeRecognizer()
+    heavy.owner = check
+    heavy.voices = {"male": FakeVoice()}
+    heavy.default_voice = "male"
+    heavy.needed = NEEDED
+    heavy.llm = None
     o = _server().Orpheus.__new__(_server().Orpheus)
-    o.recognizer = FakeRecognizer()
-    o.owner = check
+    o.heavy = heavy
     o.brain = FakeBrain()
-    o.voices = {"male": FakeVoice()}
-    o.default_voice = "male"
     o.turn_lock = asyncio.Lock()
     return o
 

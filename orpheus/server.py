@@ -12,7 +12,6 @@ it is configured (ORPHEUS_TOKEN_FILE), in case the service is ever reached some 
 """
 
 import asyncio
-import dataclasses
 import hmac
 import ipaddress
 import json
@@ -33,9 +32,9 @@ from .memory import Memory, SealedMemory
 from .numbers import plural
 from .planner import Unavailable, from_config as planner_tools
 from .secure import WrongKey, parse_key, shred
-from .speech import Sentences, Voice
+from .heavy import LocalHeavy, RemoteHeavy, Unreachable, _mic, to_pcm16  # noqa: F401 (_mic: the tests)
+from .speech import Sentences
 from .vectors import load_embedder
-from .voiceprint import NEEDED as VOICEPRINT_NEEDED, OwnerCheck
 from .web import online
 
 ALLOWED = [ipaddress.ip_network(n) for n in os.environ.get(
@@ -104,31 +103,15 @@ def tag_phrase(send, pid):
     return tagged
 
 
-def _mic(headset):
-    """The "headset" flag of a phrase as a microphone's name, None when the app did not say."""
-    return None if headset is None else "headset" if headset else "phone"
-
-
-def to_pcm16(samples):
-    return (np.clip(np.asarray(samples, dtype=np.float32), -1, 1) * 32767).astype("<i2").tobytes()
-
-
 class Orpheus:
     """The heavy parts, loaded once and shared by all connections (there is one owner anyway)."""
 
-    def __init__(self, config: Config):
-        from .stt import Recognizer
-
+    def __init__(self, config: Config, heavy=None):
         self.config = config
         t = time.monotonic()
-        self.recognizer = Recognizer(config)
-        # both voices stay loaded (~80 MB each); the phone picks one per phrase ("voice" in "start")
-        self.voices = {"male": Voice(config)}
-        try:
-            self.voices["female"] = Voice(dataclasses.replace(config, voice=config.voice_female))
-        except SystemExit:
-            log("женского голоса %s нет, будет только мужской" % config.voice_female)
-        self.default_voice = os.environ.get("ORPHEUS_SERVER_VOICE", "male")
+        # recognition, the voices and the voice check: here (the laptop alone) or on the laptop, through its
+        # connection to this server (the hub): heavy.py
+        self.heavy = heavy or LocalHeavy(config, log)
         embedder = load_embedder(config.models, log)
         memory = Memory(config.db, embedder)
         indexed = memory.reindex()
@@ -139,26 +122,25 @@ class Orpheus:
         weather, search = online(config)
         if weather is not None:
             weather.start()  # the home forecast kept fresh in the background
-        self.brain = Brain(config, memory, locked=True, planner=planner_tools(config, embedder),
+        self.brain = Brain(config, memory, self.heavy.llm, locked=True, planner=planner_tools(config, embedder),
                            weather=weather, search=search)
         plain = config.personal_db.with_name("personal.db")
         if plain.exists():  # the unencrypted file of the first version: never again on disk
             shred(plain)
             log("старый незашифрованный personal.db удалён")
-        self.owner = OwnerCheck(config.models, config.voiceprint, config.speaker, config.speaker_threshold)
-        if self.owner.problem:
-            log(self.owner.problem)
-        log("голос владельца: режим %s, %s" % (self.owner.mode, "записан (%d фраз), порог %.2f" % (
-            self.owner.voiceprint.count, self.owner.threshold) if self.owner.voiceprint.ready else "не записан"))
-        try:
-            self.brain.warmup()
-        except Exception as exc:  # Ollama not up yet at boot: the server starts all the same, the model comes later
-            log("модель не прогрета: %s" % exc)
+        if heavy is None:
+            self.warmup()
         self.turn_lock = asyncio.Lock()
         self.phones = set()  # the connections' send(), for what the server says by itself (reminders)
         self.last_voice = ""
         self.reminded = set()
         log("модели загружены за %.1f с" % (time.monotonic() - t))
+
+    def warmup(self):
+        try:
+            self.brain.warmup()
+        except Exception as exc:  # Ollama not up yet at boot: the server starts all the same, the model comes later
+            log("модель не прогрета: %s" % exc)
 
     async def reminders(self):
         """The planner's reminders said aloud on the phone ("Напоминаю: через 15 минут, в 19:00, — тренировка"):
@@ -180,7 +162,7 @@ class Orpheus:
                 text = reminder_text(item)
                 async with self.turn_lock:  # never in the middle of a reply
                     try:
-                        samples, rate = await asyncio.to_thread(self.voice(self.last_voice).synth, text)
+                        samples, rate = await self.heavy.synth(text, self.last_voice)
                     except Exception as exc:
                         log("напоминание не озвучено (%s)" % type(exc).__name__)
                         continue
@@ -199,9 +181,6 @@ class Orpheus:
             if len(self.reminded) > 500:
                 today = now.date().isoformat()
                 self.reminded = {k for k in self.reminded if k[1] >= today}
-
-    def voice(self, name):
-        return self.voices.get(name) or self.voices.get(self.default_voice) or self.voices["male"]
 
     async def set_personal(self, send, on):
         async with self.turn_lock:
@@ -243,17 +222,20 @@ class Orpheus:
         async with self.turn_lock:
             t0 = time.monotonic()
             was_personal = self.brain.personal
-            # what was said and who said it, side by side: the voice check adds no delay
-            heard, (score, owner) = await asyncio.gather(
-                asyncio.to_thread(self.recognizer.transcribe, samples),
-                asyncio.to_thread(self.owner.judge, samples, self.owner.learns(_mic(headset))))
+            try:
+                heard, score, owner, refused = await self.heavy.hear(samples, headset, strict)
+            except Unreachable as exc:
+                log("фраза %.1f с — не распознана: %s" % (seconds, exc))
+                await send({"type": "error", "message": "Голова Орфея (ноут) сейчас не в сети"})
+                await send({"type": "audio_end", "expect_reply": False, "listen": False})
+                return
             text = heard if follow_up else strip_wake_word(heard)
             t_stt = time.monotonic() - t0
             voice_note = "" if score is None else " | голос %.2f%s" % (score, "" if owner else " — не владелец")
             if headset is not None:
                 voice_note += " | %s%s" % ("наушники" if headset else "телефон", ", строго" if strict else "")
             # strict asked for the buds only: the print is theirs, the phone's microphone scores the owner low
-            if self.owner.refuses(owner, strict and headset is not False) or (not owner and was_personal):
+            if refused or (not owner and was_personal):
                 # another voice (the TV, a guest): no answer, and what it said is not written anywhere
                 log("фраза %.1f с%s — без ответа" % (seconds, voice_note))
                 await send({"type": "audio_end", "expect_reply": False, "listen": False, "reason": "not_owner"})
@@ -266,7 +248,7 @@ class Orpheus:
                 await send({"type": "audio_end", "expect_reply": False, "listen": False})
                 return
             self.last_voice = voice or getattr(self, "last_voice", "")
-            reply, first_audio = await self._answer(send, text, self.voice(voice))
+            reply, first_audio = await self._answer(send, text, voice)
             timing = "%.1f с | STT %.2f с | первый звук через %s%s" % (
                 seconds, t_stt, "%.2f с" % (first_audio - t0) if first_audio else "—", voice_note)
             timing += " | %s" % (self.brain.handled or "—")  # which scenario answered, or the model
@@ -283,24 +265,30 @@ class Orpheus:
                         "listen": handled not in ("stop", "pause"), "pause": handled == "pause"})
 
     def enroll_status(self):
-        return {"type": "enroll", "count": self.owner.voiceprint.count, "needed": VOICEPRINT_NEEDED,
-                "mode": self.owner.mode}
+        return dict(self.heavy.status(), type="enroll")
 
     async def enroll(self, send, pcm: bytes, headset=None):
         """One phrase the owner read to record his voice: no answer, just the progress."""
         samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768
         async with self.turn_lock:
-            why = await asyncio.to_thread(self.owner.enroll, samples, _mic(headset))
+            try:
+                why = await self.heavy.enroll(samples, headset)
+            except Unreachable as exc:
+                why = str(exc)
         status = self.enroll_status()
         if why:
             status["error"] = why
-        log("голос владельца: %s" % (why or "фраза %d из %d" % (status["count"], VOICEPRINT_NEEDED)))
+        log("голос владельца: %s" % (why or "фраза %d из %d" % (status["count"], status["needed"])))
         await send(status)
         await send({"type": "audio_end", "expect_reply": False, "listen": False})
 
     async def enroll_reset(self, send):
         async with self.turn_lock:
-            self.owner.voiceprint.reset()
+            try:
+                await self.heavy.enroll_reset()
+            except Unreachable as exc:
+                await send({"type": "error", "message": str(exc)})
+                return
         log("голос владельца сброшен")
         await send(self.enroll_status())
 
@@ -326,7 +314,7 @@ class Orpheus:
         async def speak(sentence):
             nonlocal started, first_audio
             try:
-                samples, rate = await asyncio.to_thread(voice.synth, sentence)
+                samples, rate = await self.heavy.synth(sentence, voice)
             except Exception as exc:  # one sentence not said must not leave the phone waiting for the rest
                 log("синтез не удался (%s): %r" % (type(exc).__name__, sentence[:60]))
                 return
@@ -397,8 +385,13 @@ def load_token():
         return None
 
 
-async def run(config: Config, host: str, port: int):
-    orpheus = Orpheus(config)
+async def run(config: Config, host: str, port: int, hub=None):
+    """[hub]: (host, port, ssl context, token) of the laptop's way in, when this is the hub: then recognition, the
+    voices and the model are the laptop's (heavy.RemoteHeavy), and the laptop connects there by itself."""
+    heavy = RemoteHeavy(log) if hub else None
+    orpheus = Orpheus(config, heavy)
+    if heavy is not None:  # the model warmed up whenever the laptop comes (a thread: it waits on this loop)
+        heavy.on_connect = lambda: threading.Thread(target=orpheus.warmup, daemon=True).start()
     token = load_token()
     log("токен %s" % ("проверяется" if token else "не задан: доступ только по адресам"))
 
@@ -487,7 +480,22 @@ async def run(config: Config, host: str, port: int):
     async with serve(session, host, port, process_request=check, max_size=None,
                      ping_interval=20, ping_timeout=20):
         log("слушаю %s:%d (разрешено: %s)" % (host, port, ", ".join(map(str, ALLOWED))))
-        await asyncio.Future()
+        if not hub:
+            await asyncio.Future()
+        worker_host, worker_port, context, worker_token = hub
+
+        def check_worker(connection, request):
+            given = request.headers.get("Authorization", "")
+            if request.path != "/worker" or not hmac.compare_digest(given.encode(), ("Bearer " + worker_token).encode()):
+                log("голова: отказ %s" % (connection.remote_address[0],))
+                return connection.respond(HTTPStatus.UNAUTHORIZED, "unauthorized\n")
+            return None
+
+        async with serve(heavy.serve, worker_host, worker_port, ssl=context, process_request=check_worker,
+                         max_size=None, ping_interval=20, ping_timeout=40):
+            log("жду голову на %s:%d" % (worker_host, worker_port))
+            await asyncio.Future()
+    del reminding
 
 
 def main(config: Config):
@@ -495,5 +503,24 @@ def main(config: Config):
     port = int(os.environ.get("ORPHEUS_PORT", "8765"))
     try:
         asyncio.run(run(config, host, port))
+    except KeyboardInterrupt:
+        pass
+
+
+def main_hub(config: Config):
+    """`python -m orpheus hub`: the server keeps the data and the scripts; the phone comes to ORPHEUS_HOST:ORPHEUS_PORT
+    (127.0.0.1:8765, behind a TLS proxy), the laptop to ORPHEUS_WORKER_PORT (8766, TLS with this server's own
+    certificate, the laptop's token)."""
+    import ssl
+
+    host = os.environ.get("ORPHEUS_HOST", "127.0.0.1")
+    port = int(os.environ.get("ORPHEUS_PORT", "8765"))
+    folder = Path(os.environ.get("ORPHEUS_HUB_DIR", str(Path.home() / ".config/orpheus")))
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(folder / "hub-cert.pem", folder / "hub-key.pem")
+    token = (folder / "hub-token").read_text().strip()
+    hub = (os.environ.get("ORPHEUS_WORKER_HOST", "0.0.0.0"), int(os.environ.get("ORPHEUS_WORKER_PORT", "8766")), context, token)
+    try:
+        asyncio.run(run(config, host, port, hub))
     except KeyboardInterrupt:
         pass

@@ -201,6 +201,18 @@ def cmd_server(config, args):
     serve(config)
 
 
+def cmd_hub(config, args):
+    from .server import main_hub
+
+    main_hub(config)
+
+
+def cmd_worker(config, args):
+    from .heavy import main as work
+
+    work(config)
+
+
 def cmd_voiceprint(config, args):
     """The owner's voice on the laptop's side: show it, reset it, or record / check it from WAV files."""
     from .voiceprint import NEEDED, OwnerCheck
@@ -240,6 +252,8 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="cmd")
     sub.add_parser("voice", help="голосовой режим через микрофон этой машины (по умолчанию)")
     sub.add_parser("server", help="сервер для телефона (docs/android-protocol.md)")
+    sub.add_parser("hub", help="сервер-диспетчер: данные и сценарии; слух, голос и модель — у ноута (worker)")
+    sub.add_parser("worker", help="ноут для хаба: распознавание, голос, модель; сам подключается к ORPHEUS_HUB")
     sub.add_parser("chat", help="текстовый чат в терминале")
     sub.add_parser("listen", help="только распознавание речи")
     sub.add_parser("warmup", help="загрузить модель в Ollama и прогреть кэш")
@@ -252,7 +266,7 @@ def main(argv=None):
     vp.add_argument("files", nargs="*")
     args = parser.parse_args(argv)
     config = Config()
-    handler = {"server": cmd_server, "chat": cmd_chat, "listen": cmd_listen, "warmup": cmd_warmup,
+    handler = {"server": cmd_server, "hub": cmd_hub, "worker": cmd_worker, "chat": cmd_chat, "listen": cmd_listen, "warmup": cmd_warmup,
                "memory": cmd_memory, "notes": cmd_notes, "voiceprint": cmd_voiceprint}.get(args.cmd, cmd_voice)
     try:
         handler(config, args)
