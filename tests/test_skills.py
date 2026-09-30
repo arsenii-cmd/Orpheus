@@ -1501,3 +1501,19 @@ def test_what_the_tenth_talk_showed():
     say(brain, "мама теперь работает учителем")
     assert say(brain, "что ты обо мне знаешь") == "Я помню: твоего друга зовут Сашка; мама работает учителем."
     assert say(brain, "сколько лет Диме если он с 2010") == "Диме 16, если день рождения в этом году уже был, иначе 15."
+
+
+def test_what_the_eleventh_talk_showed():
+    brain = make(*WEEK, replies=[text("Ясно.")] * 3)
+    assert "с 18:00 до 19:30 Физика" in say(brain, "сдвинули физику на два часа")
+    assert "с 21:00 до 22:40 ЕГЭ" in say(brain, "не в 22 а в 21 ЕГЭ")
+    assert say(brain, "хакатон отменился").startswith("Удалить")
+    say(brain, "нет")
+    for said in ["папу зовут Игорь", "у меня есть друг Саша ему 17", "мой брат Кирилл"]:
+        assert say(brain, said) == "Запомнил.", said
+    assert say(brain, "Саше на самом деле 18") == "Запомнил: у тебя есть друг Саша ему 18 лет."
+    assert say(brain, "нет брату 15") == "Запомнил: твой брат Кирилл, ему 15 лет."
+    assert say(brain, "какой день недели был 1 января 2000") == "1 января 2000 года была суббота."
+    say(brain, "добавь на завтра в 15 встречу с Димой")
+    say(brain, "и на послезавтра в 15 тоже")
+    assert brain.skills.planner.planner.quick_text == "и послезавтра в 15 Созвон"  # the fake's title of the last one

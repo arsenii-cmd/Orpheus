@@ -381,6 +381,8 @@ class Weather:
         kind = "снег" if snow else "дождь"
         codes = SNOW if snow else RAIN
         where = "" if place == self.home else " " + place.where
+        if snow and (day.get("temperature_2m_min") or 0) > 3:
+            return "Нет, %s%s снега не будет: слишком тепло." % (when, where)  # "+18 в Токио": "возможен снег" was the rain's
         if hours or (day["weather_code"] in codes and chance >= 40):
             return "Да, %s%s ожидается %s: вероятность %d%%%s." % (when, where, kind, chance,
                                                                   ", " + part_of_day(hours) if hours else "")

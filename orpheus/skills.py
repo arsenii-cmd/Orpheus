@@ -217,9 +217,12 @@ HOLIDAYS = [  # (words, month, day, how to say it after "до")
 ]
 # "погода в Сочи", "в Нижнем Новгороде": a capitalized name after "в" (the recogniser writes cities so)
 CITY = re.compile(r"(?<!\w)(?:в|во)\s+((?:[А-ЯЁ][а-яё]+(?:-[А-ЯЁа-яё]+)*)(?:\s+[А-ЯЁ][а-яё]+)?)")
+# names of two words, as the recogniser writes them: "в нью йорке", "в лос анджелесе", "в ростове на дону"
+TWO_WORD_CITY = re.compile(r"(?<!\w)(?:в|во)\s+((?:нью|лос|сан|санкт|лас|рио|буэнос|абу|эль|ла|нижн\w*|велик\w*|набережн\w*)"
+                           r"[\s-]+[а-яё]{3,}|[а-яё]{3,}[\s-]+на[\s-]+[а-яё]{3,})", re.I)
 # ... and written small: "какая погода в питере" (tried, and the home city when there is none such)
 LOWER_CITY = re.compile(r"(?<!\w)(?:в|во)\s+([а-яё]{3,}(?:-[а-яё]+)*)", re.I)
-NOT_CITY = {"что", "чем", "чего", "том", "котором", "которой", "общем", "городе", "центре", "области", "стране", "мире", "доме", "квартире", "офисе", "парке", "лесу", "горах", "поле",
+NOT_CITY = {"круге", "кругу", "угле", "углу", "квадрате", "треугольнике", "что", "чем", "чего", "том", "котором", "которой", "общем", "городе", "центре", "области", "стране", "мире", "доме", "квартире", "офисе", "парке", "лесу", "горах", "поле",
             "итоге", "целом", "общем", "принципе", "сколько", "какой", "какую", "каком", "какие", "течение", "среднем",
             "основном", "обед", "обеда", "субботу", "среду", "пятницу", "выходные", "будни", "утра", "вечера", "ночи",
             "дня", "полдень", "полночь", "интернете", "сети", "гугле", "яндексе", "заметках", "планах", "календаре"}
@@ -236,6 +239,9 @@ PART_EXPR = re.compile(r"(?<!\w)(?:утр(?:ом|а)|дн[её]м|вечер(?:�
 
 def _city(text, lower=True):
     """The city a phrase names, as a match whose group 1 is the name: "в Сочи", "в питере"."""
+    two = TWO_WORD_CITY.search(text)  # "в нью йорке" was "в Нью"
+    if two:
+        return two
     for m in CITY.finditer(text):
         if not DAY_EXPR.fullmatch(m.group(0)):
             return m
@@ -795,6 +801,10 @@ class Skills:
         if intent == "fresh" and NEWS.search(prev) and not QUESTION.search(text) and len(frag.split()) <= 5 \
                 and not TO_ME.search(text) and not ABOUT_THAT.search(frag):
             return "новости про %s" % re.sub(r"^(?:а\s+)?(?:про|о|об|по)\s+", "", frag, flags=re.I)  # not "про про технологии"
+        if intent in ("web_search", "fresh") and re.search(r"сколько\s+стоит|цена|стоимость|курс", prev, re.I) \
+                and re.fullmatch(r"[\w-]+(?:\s+[\w-]+)?", frag) and not QUESTION.search(frag):
+            # "сколько стоит биткоин" - "а эфир": the price of that, searched (the model said "3 500 по Coinbase")
+            return "найди в интернете сколько стоит %s" % frag
         if intent in ("web_search", "fresh"):
             # "найди, когда выйдет GTA 6" - "а сколько она будет стоить?": the model, asked this, said it
             # could not find it (searching nothing); searched again, with what the last search was about
@@ -985,6 +995,15 @@ class Skills:
         if span is None or span[0] != span[1] or not re.search(r"\w", when):
             return None
         d = span[0]
+        year = re.search(r"(?<!\d)(1[6-9]\d\d|2[01]\d\d)(?!\d)", to_digits(when))
+        if year and int(year.group(1)) != d.year:
+            # "какой день недели был 1 января 2000" (the year was dropped: "пятница", for this year's)
+            try:
+                d = d.replace(year=int(year.group(1)))
+            except ValueError:
+                return "В %s году такого дня нет." % year.group(1)
+            was = ["был", "был", "была", "был", "была", "была", "было"][d.weekday()] if d < today else "будет"
+            return "%d %s %d года %s %s." % (d.day, MONTHS[d.month - 1], d.year, was, WEEKDAYS[d.weekday()])
         self.last_day = d
         near = {0: "Сегодня", 1: "Завтра", 2: "Послезавтра", -1: "Вчера", -2: "Позавчера"}.get((d - today).days)
         if near:
@@ -1830,6 +1849,13 @@ class Skills:
         if m.template.startswith("запиши") and not (_has_day(what) or _has_time(what)):
             return None
         what = re.sub(r"^(?:что|чтобы)\s+", "", what, flags=re.I)
+        same = re.search(r"(?<!\w)(?:тоже|то\s+же(?:\s+самое)?|так(?:ую|ое|ой|ая)\s+же)(?!\w)", what, re.I)
+        if same:
+            # "и на послезавтра в 15 тоже" made a plan «Тоже»: the one added last, again
+            last = self.planner.last_added
+            if last is None:
+                return "Что добавить?"
+            what = what.replace(same.group(0), last["title"])
         before = re.fullmatch(r"\s*за\s+((?:\S+\s+)?(?:час\w*|минут\w*|полчаса))\s*", what, re.I)
         if before and len(self.planner.focus) != 1:
             self.wanted = (self.turn, "за %s до" % before.group(1))
@@ -2193,7 +2219,7 @@ class Skills:
             return None  # "а я тогда на работу": no time
         if m.template.startswith("[а|и|нет|не] (ее|") and not (when_only(to) or shift_of(to_digits(to))):
             return None  # "а его зовут Тимур": no day or time
-        no_verb = m.template.startswith(("[а|и] {what} (давай", "[а|и] {what} не (в", "сделай {what}", "[а] {what} {to}",
+        no_verb = m.template.startswith(("не (в|на) {was}", "[ну] [короче] {what} не (сегодня", "[а|и] {what} (давай", "[а|и] {what} не (в", "сделай {what}", "[а] {what} {to}",
                                          "[а|и] {what} на {to}", "[а] {what} (переезжает", "[а] {what} [теперь] (начнется",
                                          "[а] {what} будет"))
         if m.template.startswith("[а] {what} будет"):
@@ -2205,6 +2231,8 @@ class Skills:
             to = re.sub(r"^\s*(?:на\s+)?вечер\s*$", "на 19:00", to)
         if m.template.startswith("[а|и] {what} на {to}"):
             to = "на " + to
+        if m.template.startswith("не (в|на) {was} а (в|на) {to}"):
+            to = "в " + to  # "не в 22 а в 21 ЕГЭ"
         named = re.sub(r"(?<!\w)(?:нет|не|ой|да|ну|блин|лучше|давай|хотя|а|и|вот|так)(?!\w)", " ", what, flags=re.I)
         if no_verb and ("?" in self.heard or not re.search(r"\w{2,}", named)
                         or not (when_only(re.sub(r"\s+(?:перенес[её]м|поставим)$", "", to)) or shift_of(to_digits(to)))):

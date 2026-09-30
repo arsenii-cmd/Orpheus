@@ -174,7 +174,9 @@ def said_done(sentence):
     # just done (every "какие у меня задачи" got "Этого я не сделал")
     low = re.sub(r"(?<!\w)(?:запланирован|добавлен|записан|отмечен|сохранен)\w*", " ", low, flags=re.I)
     # "Принято.", "Поправил.", "Теперь я знаю, что…", "Хакатон теперь в 19:00": said as done, with nothing done
-    if re.search(r"(?<!\w)(?:принято|поправил\w*|обновлю|теперь\s+я\s+знаю|теперь\s+(?:в|на|с)\s+\d)(?!\w)", low, re.I):
+    # ("теперь в 14:00" was missed: the end check came after the first digit)
+    if re.search(r"(?<!\w)(?:принято|поправил\w*|обновлю|запомню|добавляю\s+в\s+память|теперь\s+я\s+знаю|теперь\s+(?:в|на|с)\s+\d+)(?!\w)",
+                 low, re.I):
         return True
     return claims_done(low) or (FUTURE_CLAIM.search(low) is not None and OFFER_WORDS.search(low) is None)
 # asked to do something the program did not take: the model's whole answer is read before it is said, for a
@@ -506,7 +508,8 @@ class Brain:
         plans = self._plans_for(text, contexts, now)
         if plans:
             extra += "\n[из планировщика — для ответа, если вопрос касается этого; иначе не упоминай: %s]" % plans
-        if WEATHER_TALK.search(text) and self.skills.weather is not None and not contexts:
+        if WEATHER_TALK.search(text) and self.skills.weather is not None and not contexts \
+                and not re.search(r"угл|треугольн|кругу|круге|кипен|кипит", text, re.I):  # "градусов в прямом угле" is no weather
             forecast = self.skills.weather_text(text if _has_day(text) else "", "", now=now)
             if not forecast.startswith("ошибка"):
                 extra += "\n[прогноз погоды дома: %s]" % forecast
@@ -620,6 +623,8 @@ class Brain:
                             piece = keep + ((" " + NOT_DONE_AFTER) if before else NOT_DONE)
                             swallow, gate = True, ""
                     if piece:
+                        # a formula aloud: "$E = 0,5 \\cdot m \\cdot v^2$" cannot be said
+                        piece = re.sub(r"\\cdot|\\times", " умножить на ", piece.replace("$", "")).replace("^2", " в квадрате")
                         if not spoke:
                             piece = lead + piece.lstrip()
                         elif gap:
