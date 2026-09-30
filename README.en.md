@@ -103,21 +103,25 @@ The chat understands `/mem`, `/notes`, `/reset` (new conversation), `/quit`.
 
 Everyday commands are handled by the program itself, without the language model: instantly and
 without making things up. From the end of a phrase to the first sound of the answer takes 0.6–1 s,
-of which ~0.3 s is recognition and ~0.4 s synthesis. The model (2.5–6 s) answers everything else:
-questions, conversation, whatever matches no scenario.
+of which ~0.3 s is recognition and ~0.4 s synthesis. The model (2.5–6 s) is a companion only:
+conversation, questions, advice, jokes. It does not see the plans, the notes or the memory and writes nothing down:
+the program does that, by the commands below.
 
 | Say | What happens |
 | --- | --- |
 | «Который час?», «Какое сегодня число?» (What time is it? What's the date?) | time and date |
 | «Сколько дней до Нового года?» (How many days until New Year?) | counting days, hours, minutes |
 | «Сколько будет 15 умножить на 37?», «20% от 3 000» | calculator |
-| «Сделай заметку: купить молоко» (Make a note: buy milk) | a note in Planner, visible on the phone and desktop |
+| «Запиши тренировку в среду в 6 утра, 10 недель» (Record a workout on Wednesday at 6 am, 10 weeks) | an event in Planner; the parts in any order, repeats by days, weeks or months. Plans are written by «Запиши …» only: to «добавь …» (add …) Orpheus answers with the command |
+| «Запиши тренировку» → «Время?» → «В 6 утра» → «Сколько раз?» → «Один раз» | what is missing is asked for; «отмена» cancels |
+| «Запиши в чек-лист купить хлеб» (Put "buy bread" on the checklist) | a task for today; an unfinished one moves to the next day |
+| «Заметка: код от домофона 4521» (Note: intercom code 4521) | a note in Planner, visible on the phone and desktop, word for word |
 | «Прочитай мои заметки», «Найди заметку про вайфай» (Read my notes; find the Wi-Fi note) | notes |
 | «Запомни, что я люблю кофе без сахара» (Remember that I take coffee without sugar) | facts about you |
 | «Что у меня завтра?», «Что у меня дальше?» (What's on tomorrow? What's next?) | planner |
 | «Когда следующая тренировка?» (When is the next workout?) | an answer from the planner |
 | «Если я свободен завтра в 19, запиши кино» (If I'm free tomorrow at 7 pm, add a movie) | added only if the slot is free; otherwise what's there and "Add anyway?" |
-| «Напомни через 2 часа выпить таблетку», «Тренировка по понедельникам, средам и пятницам в 6 утра» | a new event, task or recurring event |
+| «Напомни мне через 2 часа выпить таблетку» (Remind me in 2 hours to take a pill) | a reminder |
 | «Перенеси физику на завтра в 15», «Отмени завтра в 10 русский» → «Да» | editing plans |
 | «Перенеси его на 14», «Нет, лучше на 15» (Move it to 2 pm; no, better 3 pm) | whatever was just discussed |
 | «Удали все дела на завтра» → «Да» | clears a day after a confirmation with the list |
@@ -153,8 +157,6 @@ phrase would delay the answer by 30+ seconds. So:
    differs. Orpheus lays out the prompt so that only its end changes from turn to turn:
    - the system prompt doesn't change during a conversation — the time and date go at the start of
      the user's turn instead;
-   - a new fact isn't inserted into the system prompt right away (that would drop the whole cache):
-     it is already in the history as a `remember` call; memory is re-read when a new conversation starts;
    - history is trimmed rarely and in one large chunk, not a turn at a time.
 3. **One slot.** `OLLAMA_NUM_PARALLEL=1` — the whole cache belongs to Orpheus.
 4. **Fixed `num_ctx`.** A different context size makes Ollama reload the model.
@@ -250,7 +252,8 @@ If it reacts to a fan, raise `ORPHEUS_VAD_THRESHOLD`.
 | --- | --- |
 | `orpheus/__main__.py` | Commands `voice`, `server`, `chat`, `listen`, `memory`, `notes`, `voiceprint`, `warmup` |
 | `orpheus/server.py` | Server for the phone (WebSocket), [protocol](docs/android-protocol.en.md) |
-| `orpheus/brain.py` | System prompt, model tools, history, cache-friendly layout |
+| `orpheus/brain.py` | System prompt, conversation history, cache-friendly layout |
+| `orpheus/commands.py` | The commands «Запиши …», «Запиши в чек-лист …», «Заметка …» |
 | `orpheus/intents.py`, `orpheus/intents_ru.txt` | Phrase templates the program handles itself |
 | `orpheus/skills.py` | Program scenarios: what to do with each phrase |
 | `orpheus/planner.py` | Planner (events, tasks, notes) through its local API |

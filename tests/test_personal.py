@@ -1,7 +1,6 @@
 import hashlib
 import re
 from datetime import datetime
-import time
 
 import numpy as np
 
@@ -67,7 +66,7 @@ def test_the_ordinary_section_remembers_nothing_of_personal():
     assert "поссорился" not in asked and "пять тысяч" not in asked and "(личное)" not in asked
     list(b.ask("личное", now=NOW))
     list(b.ask("что у меня с Виктором?", now=NOW))
-    assert "поссорился с Виктором" in str(b.llm.requests[1])  # in «Личное» itself, it does
+    assert "поссорился с Виктором" not in str(b.llm.requests[1])  # in «Личное» too: the model is a companion, no memory
 
 
 def test_the_fixed_prompt_start_survives_a_switch():
@@ -102,14 +101,6 @@ def test_recall_by_meaning_finds_notes_and_past_talks():
     assert m.recall("какой пароль от вайфая")[0]["text"] == "Пароль сети вайфай: ml3"
     assert m.recall("что я говорил про Виктора")[0]["kind"] == "turn"
     assert m.recall("") == []
-
-
-def test_personal_recall_brings_the_general_one_marked():
-    b = make(text("a"), text("b"), embedder=WordEmbedder())
-    b.memory.add_note("Виктор вернёт долг в пятницу")
-    list(b.ask("личное", now=NOW))
-    list(b.ask("когда Виктор вернёт долг", now=NOW))
-    assert "(общее) заметка" in b.llm.requests[0][-1]["content"]
 
 
 def test_only_a_command_opens_personal():
@@ -160,10 +151,3 @@ def test_a_mode_switch_is_its_own_turn():
     assert b.handled == "mode" and b.calls == []
 
 
-def test_past_talks_come_along_only_when_the_phrase_is_about_the_past():
-    # "ты вообще умный?" brought three chats of other days ("Вы цените оперативность…"), and the model retold them
-    b = make(text("a"), text("b"), embedder=WordEmbedder())
-    b.memory.add_turn("я поссорился с Виктором из-за денег", "Сочувствую.")
-    b.since = time.time() + 2  # that talk was before this conversation
-    assert "говорили" not in "\n".join(b._recall("как там Виктор"))
-    assert "говорили" in "\n".join(b._recall("что я говорил про Виктора"))

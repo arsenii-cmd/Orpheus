@@ -73,7 +73,7 @@ def test_the_most_specific_template_wins():
     assert it.match("Удали заметку про ремонт.")[0].intent == "note_delete"
     assert it.match("Удали физику.")[0].intent == "plan_delete"
     assert it.match("Поставь будильник на 7.")[0].intent == "alarm"
-    assert it.match("Поставь на пятницу тренировку в 8 вечера.")[0].intent == "plan_add"
+    assert it.match("Поставь на пятницу тренировку в 8 вечера.")[0].intent == "plan_hint"
     assert it.match("Какая погода завтра?")[0].intent == "weather"
     assert it.match("Что ты умеешь?")[0].intent == "capabilities"
     assert it.match("Запомни в заметках код 4521")[0].intent == "note_add"
@@ -91,7 +91,7 @@ PROGRAM = {  # phrase -> the scenario that answers it, without the model
     "Сколько дней до Нового года?": "days_until", "Сколько осталось до 1 октября?": "days_until",
     "Сколько будет 15 умножить на 37?": "calc", "Посчитай 20% от 3 000.": "calc", "Сколько будет 2 плюс 2?": "calc",
     "Чему равен корень из 144?": "calc",
-    "Сделай заметку: купить молоко и хлеб.": "note_add", "Запиши код от домофона 4521.": "note_add",
+    "Сделай заметку: купить молоко и хлеб.": "note_add", "Заметка: код от домофона 4521.": "note_add",
     "Создай заметку про ремонт, купить краску.": "note_add", "Новая заметка: позвонить в банк.": "note_add",
     "Прочитай мои заметки.": "note_list", "Какие у меня заметки?": "note_list", "Что у меня в заметках?": "note_list",
     "Прочитай последнюю заметку.": "note_last", "Найди заметку про ремонт.": "note_find",
@@ -99,8 +99,8 @@ PROGRAM = {  # phrase -> the scenario that answers it, without the model
     "Запомни, что я люблю кофе без сахара.": "remember", "Забудь, что я люблю кофе.": "forget",
     "Что у меня завтра?": "plan_ask", "А что завтра?": "plan_ask", "Какие планы на неделю?": "plan_ask",
     "Что у меня дальше?": "plan_next",
-    "Добавь на завтра в 8 вечера тренировку.": "plan_add", "Напомни через 2 ч выпить таблетку.": "plan_add",
-    "Запланируй на 3 октября в 15:30 стоматолога.": "plan_add",
+    "Запиши на завтра в 8 вечера тренировку один раз.": "record", "Напомни через 2 ч выпить таблетку.": "plan_add",
+    "Запиши на 3 октября в 15:30 стоматолога, один раз.": "record",
     "Отметь физику выполненной.": "plan_done", "Перенеси физику на завтра в 15.": "plan_move",
     "Удали физику.": "plan_delete", "Отмени завтра в 10 занятие по русскому.": "plan_delete", "Удари физику.": "plan_delete",
     "Повтори.": "repeat", "Что ты сказал?": "repeat", "Привет": "greet", "Добрый вечер!": "greet",
@@ -182,7 +182,7 @@ def test_notes_go_to_the_planner():
     assert say(brain, "Сделай заметку: купить молоко и хлеб.") == "Записал в заметки: Купить молоко и хлеб."
     assert say(brain, "Сделай заметку про ремонт, купить краску и валик.") == \
         "Записал в заметки «Ремонт»: купить краску и валик."
-    assert say(brain, "Запиши код от домофона 4521.") == "Записал в заметки: Код от домофона 4521."
+    assert say(brain, "Заметка: код от домофона 4521.") == "Записал в заметки: Код от домофона 4521."
     long = ("Запиши, что в субботу приедет мастер чинить стиральную машину, нужно освободить проход в ванную "
             "и убрать вещи с полки")
     assert say(brain, long).startswith("Записал в заметки: В субботу приедет мастер")
@@ -195,7 +195,7 @@ def test_notes_go_to_the_planner():
 def test_notes_are_read_found_and_deleted_with_a_yes():
     brain = make()
     say(brain, "Сделай заметку про ремонт: купить краску и валик.")
-    say(brain, "Запиши код от домофона 4521.")
+    say(brain, "Заметка: код от домофона 4521.")
     assert say(brain, "Прочитай мои заметки.") == "В заметках: Код от домофона 4521; Ремонт."
     assert say(brain, "Прочитай последнюю заметку.") == "Последняя заметка: Код от домофона 4521."
     assert say(brain, "Найди заметку про ремонт.") == "«Ремонт»: Купить краску и валик."
@@ -259,15 +259,15 @@ def test_plan_next_and_add_in_colloquial_time():
     assert say(brain, "Что у меня дальше?") == "Дальше в 16:00 Физика."
     say(brain, "Напомни через 2 ч выпить таблетку.")
     assert brain.planner.planner.quick_text == "в 16:03 выпить таблетку"
-    say(brain, "Добавь в половине восьмого ужин с Олей.")
+    say(brain, "Запиши в половине восьмого ужин с Олей один раз.")
     assert brain.planner.planner.quick_text == "в 19:30 ужин с Олей"
-    say(brain, "Добавь на завтра в 8 вечера тренировку.")
+    say(brain, "Запиши на завтра в 8 вечера тренировку, один раз.")
     assert brain.planner.planner.quick_text == "завтра в 20:00 тренировку"
 
 
 def test_undo_after_adding_removes_it():
     brain = make()
-    say(brain, "Добавь на завтра в 12 созвон.")
+    say(brain, "Запиши на завтра в 12 созвон, один раз.")
     assert "new" in brain.planner.planner.rows
     assert say(brain, "Верни как было.").startswith("Убрал из планов:")
     assert "new" not in brain.planner.planner.rows
@@ -375,11 +375,11 @@ def test_a_note_is_found_whatever_letters_it_was_written_in():
 
 def test_task_words_are_not_the_title():
     brain = make()
-    say(brain, "Добавь задачу купить молоко.")
+    say(brain, "Запиши задачу купить молоко без времени один раз.")
     assert brain.planner.planner.quick_text == "купить молоко"
-    say(brain, "Внеси в план на завтра встречу с Петей.")
+    say(brain, "Запиши на завтра встречу с Петей, весь день, один раз.")
     assert brain.planner.planner.quick_text == "завтра встречу с Петей"
-    say(brain, "Добавь на субботу поход в планетарий и купить готовую еду.")
+    say(brain, "Запиши на субботу поход в планетарий и купить готовую еду без времени один раз.")
     assert brain.planner.planner.quick_text == "на субботу поход в планетарий и купить готовую еду"
 
 
@@ -423,7 +423,7 @@ def test_it_and_the_second_one_are_what_was_just_said():
     assert say(brain, "Перенеси третье на 21.") == "Перенёс на завтра, субботу, 26 сентября: с 21:00 до 22:40 ЕГЭ."
     assert say(brain, "А первое удали.") == "Удалить завтра, суббота, 26 сентября — в 10:00 Занятие по русскому языку?"
     assert say(brain, "Да.") == "Удалил: завтра, суббота, 26 сентября — в 10:00 Занятие по русскому языку."
-    say(brain, "Добавь на завтра в 12 созвон с Петей.")
+    say(brain, "Запиши на завтра в 12 созвон с Петей один раз.")
     assert say(brain, "Перенеси его на 14.") == "Перенёс на завтра, субботу, 26 сентября: в 14:00 Созвон."
     assert say(brain, "Нет, лучше на 15.") == "Перенёс на завтра, субботу, 26 сентября: в 15:00 Созвон."
     assert say(brain, "Удали его.") == "Удалить завтра, суббота, 26 сентября — в 15:00 Созвон?"
@@ -459,15 +459,15 @@ def test_two_requests_in_one_phrase_are_both_done():
     assert say(brain, "Запомни, что я люблю кофе, и сделай заметку купить кофе.") == \
         "Запомнил. Записал в заметки: Купить кофе."
     assert brain.memory.facts() == [(1, "Я люблю кофе")]
-    say(brain, "Добавь на завтра созвон в 12 и тренировку в 18.")
-    assert brain.skills.handled == "plan_add+plan_add"
+    say(brain, "Запиши на завтра созвон в 12 и тренировку в 18, один раз.")
+    assert brain.skills.handled == "record"
     assert brain.planner.planner.quick_text == "завтра тренировку в 18"
     assert say(brain, "Что у меня завтра и послезавтра?").endswith("Послезавтра, воскресенье, 27 сентября: в планах ничего нет.")
     # one request with "и" inside stays one
     say(brain, "Сделай заметку: купить молоко и хлеб.")
     assert brain.skills.handled == "note_add"
-    say(brain, "Добавь на субботу поход в планетарий и купить готовую еду.")
-    assert brain.skills.handled == "plan_add"
+    say(brain, "Запиши на субботу поход в планетарий и купить готовую еду без времени, один раз.")
+    assert brain.skills.handled == "record"
 
 
 def test_a_second_half_that_is_no_request_leaves_the_phrase_whole():
@@ -496,7 +496,7 @@ def test_a_name_is_remembered_and_told():
     assert say(brain, "Как меня зовут?") == "Тебя зовут Иван."
     assert say(brain, "Называй меня Сеня.") == "Запомнил: тебя зовут Сеня."
     assert brain.memory.facts() == [(1, "Меня зовут Сеня")]
-    assert "Меня зовут Сеня" in brain.facts  # the model reads it at once
+    assert brain.facts == "Собеседника зовут Сеня."  # the model knows it at once
     assert brain.skills.handle("меня зовут на работу", NOW) is None
 
 
@@ -554,15 +554,10 @@ def test_leap_years_are_counted_not_guessed():
     assert say(brain, "Когда следующий високосный год?") == "Следующий високосный год — 2028."
 
 
-def test_the_model_reads_the_plans_it_is_asked_about():
-    brain = make(*WEEK, replies=[text("Успеете, если до 22:00.")])
+def test_the_model_reads_no_plans():
+    brain = make(*WEEK, replies=[text("Смотря сколько у тебя дел.")])
     say(brain, "Успею ли я завтра между делами сходить в зал?")
-    sent = brain.llm.requests[0][-1]["content"]
-    assert "[из планировщика — для ответа, если вопрос касается этого; иначе не упоминай: завтра, суббота, 26 сентября: " \
-           "в 10:00 Занятие" in sent
-    brain = make(*WEEK, replies=[text("Восемь.")])
-    say(brain, "Сколько планет в Солнечной системе?")  # "планет" is no plan: the day's plans were read out after it
-    assert "из планировщика" not in brain.llm.requests[0][-1]["content"]
+    assert "Занятие" not in str(brain.llm.requests[0])
 
 
 def test_bring_back_the_one_named():
@@ -589,7 +584,7 @@ def test_am_i_free_looks_at_that_part_of_the_day():
 
 def test_numbers_in_words_move_it_too():
     brain = make(*WEEK)
-    say(brain, "Добавь на завтра в 12 созвон с Петей.")
+    say(brain, "Запиши на завтра в 12 созвон с Петей один раз.")
     assert say(brain, "Перенеси его на четырнадцать.") == "Перенёс на завтра, субботу, 26 сентября: в 14:00 Созвон."
     assert say(brain, "Нет, лучше на пятнадцать.") == "Перенёс на завтра, субботу, 26 сентября: в 15:00 Созвон."
 
@@ -649,7 +644,7 @@ def test_a_birthday_is_kept_and_everything_forgotten_after_a_yes():
 
 def test_moves_by_an_hour_renames_marks_all_and_the_last_added():
     brain = make(*WEEK)
-    say(brain, "Добавь на завтра в 12 созвон с Петей.")
+    say(brain, "Запиши на завтра в 12 созвон с Петей один раз.")
     assert say(brain, "Перенеси созвон на час позже.") == "Перенёс на завтра, субботу, 26 сентября: в 13:00 Созвон."
     assert say(brain, "Сдвинь на полчаса раньше.") == "Перенёс на завтра, субботу, 26 сентября: в 12:30 Созвон."
     assert say(brain, "Измени время физики на 18.") == "Перенёс на сегодня, пятницу, 25 сентября: с 18:00 до 19:30 Физика."
@@ -670,36 +665,32 @@ def test_repeats_by_weeks_and_months_on_any_days():
     orig_save, orig_quick = fake.save, fake.quick
     fake.save = lambda item: (saved.append(item), orig_save(item))[1]
     fake.quick = lambda text, default_day=None: (quick.append(text), orig_quick(text, default_day))[1]
-    say(brain, "Добавь тренировку по средам в 19.")
+    assert say(brain, "Запиши тренировку по средам в 19.") == "Сколько раз?"
+    say(brain, "26 недель")
     assert quick[-1] == "в среду тренировку в 19" and saved[-1]["repeat"] == {"unit": "week", "count": 26}
     say(brain, "Напомни оплатить интернет каждый месяц 5 числа.")
     assert saved[-1]["repeat"] == {"unit": "month", "count": 12}
     quick.clear(), saved.clear()
-    reply = say(brain, "Добавь тренировку по понедельникам, средам и пятницам в 6 утра с повтором 10 недель.")
+    reply = say(brain, "Запиши тренировку по понедельникам, средам и пятницам в 6 утра с повтором 10 недель.")
     assert quick == ["в понедельник тренировку в 06:00", "в среду тренировку в 06:00", "в пятницу тренировку в 06:00"]
-    assert [i["repeat"] for i in saved] == [{"unit": "week", "count": 10}] * 3
-    assert reply.startswith("Добавил по понедельникам, средам и пятницам, 10 недель, с ")
-    assert say(brain, "Верни.").startswith("Убрал все серии")
+    assert [i["repeat"] for i in saved if i.get("repeat")] == [{"unit": "week", "count": 10}] * 3
+    assert reply.startswith("Записал «Созвон»") and "по понедельникам, средам и пятницам, 10 недель" in reply, reply
+    assert say(brain, "Верни.").startswith("Убрал")
     quick.clear(), saved.clear()
-    assert say(brain, "Поставь напоминание выпить витамины каждый день в 8 утра.").startswith("Добавил каждый день, 26 недель")
-    assert len(quick) == 7
-    quick.clear()
-    say(brain, "Добавь зарядку по будням в 7 на 3 месяца.")
+    assert "каждый день, 30 раз" in say(brain, "Запиши выпить витамины каждый день в 8 утра 30 дней.")
+    assert saved[-1]["repeat"] == {"unit": "day", "count": 30}
+    quick.clear(), saved.clear()
+    say(brain, "Запиши зарядку по будням в 7 на 3 месяца.")
     assert len(quick) == 5 and saved[-1]["repeat"] == {"unit": "week", "count": 12}
     quick.clear()
-    say(brain, "Добавь бассейн каждый вторник и четверг в 20 10 раз.")
+    say(brain, "Запиши бассейн каждый вторник и четверг в 20 10 раз.")
     assert quick == ["во вторник бассейн в 20", "в четверг бассейн в 20"]
-    # the recogniser dropped the commas, and the days came with "в" instead of "по"
     quick.clear(), saved.clear()
-    assert say(brain, "Поставь тренировку по понедельникам средам и пятницам в 6 утра.").startswith(
-        "Добавил по понедельникам, средам и пятницам, 26 недель")
-    assert quick == ["в понедельник тренировку в 06:00", "в среду тренировку в 06:00", "в пятницу тренировку в 06:00"]
+    say(brain, "Запиши тренировку в понедельник и среду в 6 утра 10 недель.")
+    assert [i["repeat"] for i in saved if i.get("repeat")] == [{"unit": "week", "count": 10}] * 2
     quick.clear(), saved.clear()
-    say(brain, "Добавь тренировку в понедельник среду и пятницу в 6 утра каждую неделю.")
-    assert len(quick) == 3 and [i["repeat"] for i in saved] == [{"unit": "week", "count": 26}] * 3
-    quick.clear(), saved.clear()
-    say(brain, "Добавь тренировку в понедельник и среду в 6 утра 10 недель.")
-    assert [i["repeat"] for i in saved] == [{"unit": "week", "count": 10}] * 2
+    say(brain, "Запиши платёж 5 октября в 10 3 месяца.")
+    assert saved[-1]["repeat"] == {"unit": "month", "count": 3}
 
 
 def test_several_days_once_each():
@@ -709,18 +700,18 @@ def test_several_days_once_each():
     orig_save, orig_quick = fake.save, fake.quick
     fake.save = lambda item: (saved.append(item), orig_save(item))[1]
     fake.quick = lambda text, default_day=None: (quick.append(text), orig_quick(text, default_day))[1]
-    reply = say(brain, "Добавь тренировку в понедельник, в среду и в пятницу в 6 утра.")
+    reply = say(brain, "Запиши тренировку в понедельник, в среду и в пятницу в 6 утра, один раз.")
     assert quick == ["в понедельник тренировку в 06:00", "в среду тренировку в 06:00", "в пятницу тренировку в 06:00"]
     assert not any(i.get("repeat") for i in saved)  # no "каждую неделю": once each
-    assert reply.startswith("Добавил в ")
+    assert reply.startswith("Записал в ")
     quick.clear()
-    say(brain, "Добавь встречу в понедельник в 10.")
+    say(brain, "Запиши встречу в понедельник в 10 один раз.")
     assert quick == ["встречу в понедельник в 10:00"]  # one day: as before
 
 
 def test_titles_lose_what_is_said_around_them():
     brain = make()
-    say(brain, "Поставь reminder на завтра купить хлеб.")
+    say(brain, "Запиши reminder на завтра купить хлеб без времени один раз.")
     assert brain.planner.planner.quick_text == "завтра купить хлеб"
     from orpheus.planner import tidy_title
     assert tidy_title("Встреча с Машей в в кафе") == "Встреча с Машей в кафе"
@@ -778,8 +769,8 @@ def test_two_answers_to_one_phrase_do_not_say_the_same_twice():
     brain = make(*WEEK)
     assert say(brain, "Какое сегодня число и что у меня по плану?") == \
         "Сегодня пятница, 25 сентября. По плану: с 16:00 до 17:30 Физика."
-    reply = say(brain, "Добавь на завтра созвон в 12 и тренировку в 18.")
-    assert reply.count("Добавил") == 1 and reply.count("Созвон") == 2  # the fake Planner makes a "Созвон" of both
+    reply = say(brain, "Запиши на завтра созвон в 12 и тренировку в 18, один раз.")
+    assert reply.count("Записал") == 1 and reply.count("Созвон") == 2, reply  # the fake Planner makes a "Созвон" of both
     assert brain.llm.requests == []
 
 
@@ -813,12 +804,11 @@ def test_the_busiest_and_the_freest_day_are_counted():
     assert brain.llm.requests == []
 
 
-def test_a_plan_told_is_added_not_answered_by_the_model():
-    brain = make(*WEEK)
+def test_a_plan_told_is_not_added_without_the_command():
+    brain = make(*WEEK, replies=[text("Скажи «Запиши», и запишу."), text("Поздравляю!"), text("Понятно."), text("Была.")])
     fake = brain.skills.planner.planner
-    assert say(brain, "В понедельник в 16:40 занятие Петров по физике.").startswith("Добавил на ")
-    assert fake.quick_text.lower() == "в понедельник в 16:40 занятие петров по физике" and brain.llm.requests == []
-    brain = make(*WEEK, replies=[text("Поздравляю!"), text("Понятно."), text("Была.")])
+    fake.quick_text = ""
+    say(brain, "В понедельник в 16:40 занятие Петров по физике.")  # plans are written by "Запиши …" only
     fake = brain.skills.planner.planner
     fake.quick_text = ""
     say(brain, "У меня завтра день рождения.")  # no time: not a plan
@@ -1024,7 +1014,7 @@ def test_the_training_as_it_was_asked_on_28_09():
     fake.quick = lambda text, default_day=None: fake.save(  # plannerd's parse, enough for these three
         {"kind": "event", "title": "Тренировка", "start_time": "06:00",
          "date": {"в понедельник": "2026-09-28", "в среду": "2026-09-30", "в пятницу": "2026-10-02"}[text.split(" тренировку")[0]]})
-    assert say(brain, "Поставь тренировку в понедельник, среду и пятницу на 6:00 утра.").startswith("Добавил в понедельник, 28 сентября; в среду")
+    assert say(brain, "Запиши тренировку в понедельник, среду и пятницу на 6:00 утра, один раз.").startswith("Записал в понедельник, 28 сентября; в среду")
     assert len(fake.rows) == 3
     assert say(brain, "Сделай для этих тренировок повторение 50 недель.") == \
         "Теперь «Тренировка» повторяется по понедельникам, средам и пятницам, 50 недель, с 28 сентября."
@@ -1065,11 +1055,12 @@ def test_plans_as_said():
     quick = []
     orig = fake.quick
     fake.quick = lambda text, default_day=None: (quick.append(text), orig(text, default_day))[1]
-    say(brain, "Можешь добавить встречу с Олегом завтра в 12?")
-    assert quick and quick[-1].endswith("в 12")  # asked as a question, still added (plannerd reads "в 12" as 12:00)
-    say(brain, "Запиши меня к парикмахеру на субботу на 12.")
+    assert say(brain, "Можешь добавить встречу с Олегом завтра в 12?").startswith("Чтобы записать в планы, скажи: «Запиши»")
+    assert quick == []
+    assert say(brain, "Запиши меня к парикмахеру на субботу на 12.") == "Сколько раз?"
+    say(brain, "Один раз.")
     assert quick[-1].endswith("в 12:00")
-    say(brain, "Добавь на завтра в семь тридцать утра зарядку.")
+    say(brain, "Запиши на завтра в семь тридцать утра зарядку один раз.")
     assert "07:30" in quick[-1]
     assert say(brain, "Физику на завтра перекинь.").startswith("Перенёс на завтра")
     assert fake.rows["f"]["date"] == "2026-09-26"
@@ -1087,14 +1078,15 @@ def test_no_the_other_day_offers_it():
 
 
 def test_a_plan_told_right_after_adding_is_not_a_fix():
-    brain = make()
+    brain = make(replies=[text("Хорошего концерта.")])
     fake = brain.planner.planner
-    say(brain, "Добавь на завтра в 17 репетитора.")
+    say(brain, "Запиши на завтра в 17 репетитора один раз.")
     quick = []
     orig = fake.quick
     fake.quick = lambda text, default_day=None: (quick.append(text), orig(text, default_day))[1]
+    before = dict(fake.rows)
     say(brain, "В понедельник в 8 вечера иду на концерт.")
-    assert brain.skills.handled == "plan_add" and quick  # a plan of its own, not "move the last one to Monday"
+    assert brain.skills.handled != "plan_move" and fake.rows == before  # not "move the last one to Monday"
 
 
 def test_spoken_times_and_titles():
@@ -1123,12 +1115,13 @@ def test_conversation_as_it_goes():
 
 def test_an_event_without_a_day_is_asked_for():
     brain = make()
-    assert say(brain, "Добавь встречу.") == "На когда поставить «Встреча»?"
+    assert say(brain, "Запиши встречу.") == "Время?"
     quick = []
     orig = brain.planner.planner.quick
     brain.planner.planner.quick = lambda text, default_day=None: (quick.append(text), orig(text, default_day))[1]
-    say(brain, "Завтра в 12.")
-    assert [q.lower() for q in quick] == ["завтра в 12 встречу"]
+    assert say(brain, "Завтра в 12.") == "Сколько раз?"
+    say(brain, "один раз")
+    assert [q.lower() for q in quick] == ["встречу завтра в 12"]
     assert say(brain, "Напомни купить хлеб.").startswith("Добавил")  # a thing to do: no question
 
 
@@ -1137,7 +1130,7 @@ def test_several_items_in_one_phrase():
     quick = []
     orig = brain.planner.planner.quick
     brain.planner.planner.quick = lambda text, default_day=None: (quick.append(text), orig(text, default_day))[1]
-    say(brain, "Добавь на завтра: в 9 пробежка, в 13 обед с Никитой и в 20 кино.")
+    say(brain, "Запиши на завтра: в 9 пробежка, в 13 обед с Никитой и в 20 кино. Один раз.")
     assert [q.split(" в ")[0] for q in quick] == ["завтра"] * 3 and len(quick) == 3
 
 
@@ -1193,7 +1186,7 @@ def test_what_a_talk_with_him_showed_the_second_time():
     # a talk by an agent: "а её на час позже", "не верни как было" went to the model, which said "перенесу на 20:00",
     # "удалена и добавлена", "восстанавливаю" and did none of it (the fake planner answers any add with 12:00 «Созвон»)
     brain = make()
-    say(brain, "слушай добавь мне тренировку завтра в 7 вечера")
+    say(brain, "слушай запиши тренировку завтра в 7 вечера один раз")
     assert say(brain, "а её на час позже").startswith("Перенёс на") and "13:00" in brain.last_reply
     assert say(brain, "не верни как было").startswith("Вернул как было") and "12:00" in brain.last_reply
     assert brain.skills.planner.planner.rows["new"]["start_time"] == "12:00"
@@ -1238,7 +1231,7 @@ def test_corrections_as_they_are_said_move_it_and_memory_is_updated():
     # the third talk: "не в 12 а в 14", "не, в 15", "не, на четверг", "и в 10" went to the model, which said
     # "переношу" each time and moved nothing; "теперь друга зовут Миша" -> "обновляю", the old one kept
     brain = make(replies=[text("м")] * 3)
-    say(brain, "добавь на завтра встречу в 12")
+    say(brain, "запиши на завтра встречу в 12 один раз")
     assert "14:00" in say(brain, "не в 12 а в 14")
     assert "16:00" in say(brain, "блин не в 14 в 16")
     assert "13:00" in say(brain, "нет в час")
@@ -1254,11 +1247,9 @@ def test_plans_said_as_they_are_said_are_added_with_clean_titles():
     # the third talk: each of these went to the model ("Этого я не сделал") or left bits of speech in the title
     from orpheus.planner import tidy_title
     brain = make(*WEEK, replies=[text("Отдохни.")])
-    for said, sent in [("у меня в субботу турнир", "у меня в субботу турнир"), ("надо купить молоко", "купить молоко"),
-                       ("не забудь мне завтра нужно отнести книги в библиотеку", "завтра нужно отнести книги в библиотеку"),
-                       ("ну и задачу сделать доклад по истории на четверг", "сделать доклад по истории на четверг"),
-                       ("запиши на завтра футбол с 16 до 18", "завтра футбол с 16 до 18")]:
-        assert say(brain, said).startswith("Добавил"), said
+    for said, sent in [("запиши на завтра футбол с 16 до 18 один раз", "завтра футбол с 16 до 18"),
+                       ("ну запиши задачу сделать доклад по истории на четверг без времени один раз", "сделать доклад по истории на четверг")]:
+        assert say(brain, said).startswith("Записал"), said
         assert brain.skills.planner.planner.quick_text == sent, said
     assert say(brain, "мне надо отдохнуть") == "Отдохни."
     assert tidy_title("Ну у меня в пробное собеседование запиши") == "Пробное собеседование"
@@ -1301,8 +1292,6 @@ def test_what_to_remind_is_asked_and_the_answer_added():
     assert say(brain, "позвонить бабушке").startswith("Добавил")
     assert brain.skills.planner.planner.quick_text == "в 14:23 позвонить бабушке"
     assert say(brain, "напомни") == "Что напомнить?"
-    assert say(brain, "добавь задачу") == "Что добавить?"
-    assert say(brain, "сделать физику").startswith("Добавил")
     assert say(brain, "напомни через час") == "Что напомнить?"
     assert say(brain, "ладно забей") == "Хорошо."
 
@@ -1339,7 +1328,7 @@ def test_a_repeat_without_the_verb_and_the_whole_of_a_repeat_deleted():
     # the fourth talk: "по будням в 8 утра английский" went to the model ("добавлен в расписание", nothing added);
     # "удали всю серию английский" deleted the next one only
     brain = make(*WEEK)
-    assert say(brain, "по будням в 8 утра английский").startswith("Добавил по будням")
+    assert say(brain, "запиши английский по будням в 8 утра 10 недель").startswith("Записал")
     series = [{"id": "e%d" % k, "kind": "event", "title": "Английский", "date": "2026-09-%d" % (28 + k), "start_time": "08:00",
                "series": "s9"} for k in range(3)]
     brain = make(*WEEK, *series)
@@ -1385,7 +1374,7 @@ def test_lets_add_postpone_by_days_and_titles_from_speech():
     # model; titles «Давай запишем химию», «Там купить билеты», «Контрольную»
     from orpheus.planner import tidy_title
     brain = make(*WEEK)
-    assert say(brain, "давай добавим контрольную по химии в среду").startswith("Добавил")
+    assert say(brain, "давай добавим контрольную по химии в среду").startswith("Чтобы записать в планы")
     assert say(brain, "отложи ЕГЭ на неделю").startswith("Перенёс на субботу, 3 октября")
     assert say(brain, "отложи хакатон на 2 дня").startswith("Перенёс на понедельник, 28 сентября")
     assert [tidy_title(t) for t in ("Давай запишем химию", "Там купить билеты", "Контрольную")] == [
@@ -1411,7 +1400,7 @@ def test_a_plan_named_makes_the_models_claims_checked():
     brain = make(*WEEK, {"id": "k", "kind": "task", "title": "Контрольная по алгебре", "date": "2026-09-28"},
                  replies=[text("Контрольная переносится на вторник.")])
     assert say(brain, "контрольная теперь во вторник").startswith("Перенёс на вторник")
-    assert say(brain, "а контрольная как там вообще").startswith("Этого я не сделал")
+    assert say(brain, "а контрольная как там вообще").startswith("Этого я сам не делаю")
 
 
 def test_what_the_seventh_talk_showed():
@@ -1477,7 +1466,7 @@ def test_what_the_ninth_talk_showed():
     say(brain, "перенеси ЕГЭ на 21")
     assert say(brain, "верни хакатон").startswith("Вернул как было") and "Хакатон" in brain.last_reply
     assert "с 19:00 до 20:30 Физика" in say(brain, "перенеси физику на сегодня на вечер")
-    assert say(brain, "добавь на завтра в 25 часов сон").startswith("Такого часа нет")
+    assert say(brain, "запиши на завтра в 25 часов сон один раз").startswith("Такого часа нет")
     say(brain, "мой любимый цвет синий")
     assert say(brain, "поменяй мой любимый цвет на красный") == "Запомнил: твой любимый цвет красный."
     say(brain, "я сдаю физику и информатику")
@@ -1514,9 +1503,9 @@ def test_what_the_eleventh_talk_showed():
     assert say(brain, "Саше на самом деле 18") == "Запомнил: у тебя есть друг Саша ему 18 лет."
     assert say(brain, "нет брату 15") == "Запомнил: твой брат Кирилл, ему 15 лет."
     assert say(brain, "какой день недели был 1 января 2000") == "1 января 2000 года была суббота."
-    say(brain, "добавь на завтра в 15 встречу с Димой")
-    say(brain, "и на послезавтра в 15 тоже")
-    assert brain.skills.planner.planner.quick_text == "и послезавтра в 15 Созвон"  # the fake's title of the last one
+    say(brain, "запиши на завтра в 15 встречу с Димой один раз")
+    say(brain, "и запиши на послезавтра в 15 тоже один раз")
+    assert brain.skills.planner.planner.quick_text == "послезавтра в 15 Созвон"  # the fake's title of the last one
 
 
 def test_what_the_twelfth_talk_showed():

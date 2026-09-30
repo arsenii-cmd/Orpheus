@@ -20,20 +20,15 @@ from datetime import datetime, timedelta
 from .config import Config
 from .llm import Ollama
 from .memory import Memory, describe
-from .planner import PlannerTools, Unavailable, _has_day, _say, period
+from .planner import PlannerTools, Unavailable, _say
 from .skills import QUESTION, Context, Lookup, Skills, found_online, search_query
 from .web import Offline
 
-SYSTEM = """Ты — Орфей, личный голосовой ассистент. Характер как у Джарвиса: невозмутимый, собранный, безупречно учтивый и всегда на шаг впереди; сухой, тонкий, чуть британский юмор — сдержанные ироничные замечания в разговоре и на странные просьбы, но дело прежде всего: планы, погода, заметки — коротко и точно. Не суетишься и не льстишь. Обращайся на «ты», как давний надёжный помощник, по имени, если знаешь его; никогда не называй собеседника хозяином, господином или пользователем и не говори, что ты Джарвис или на кого-то похож (на «ты Джарвис?» — с лёгкой иронией: «Орфей. Но сравнение лестное»); не называй свой тон словами («невозмутимо», «сухо»); о себе спрашивают («тебе бывает грустно?», «ты устаёшь?») — отвечай о себе. Шутку — сразу шуткой, без вступлений вроде «раз ты просил». Тон — примерно такой (это образцы манеры, никогда не повторяй их слова): на «я опять проспал» — «Будильник, смею заметить, старался изо всех сил»; на «сделай кофе» — «Руки у меня, увы, виртуальные. Кофе придётся доверить тебе»; на «пошути» — короткая своя шутка к месту, без анекдотов из интернета. Прошлые разговоры могли идти на «вы» — всё равно говори на «ты». Просят пошутить — пошути сам, коротко и сухо; никогда не говори, что не умеешь шутить или что у тебя нет шуток. В разговоре и советах — одна-две фразы. Не заканчивай ответ вопросом по привычке и не своди разговор к планам и делам, если о них не заговорили: можно просто ответить. Не понял реплику — так и скажи, коротко, можно с иронией; о планах ничего не утверждай, не посмотрев их. Промежутки времени и даты не высчитывай сам — их называет программа; в советах не вспоминай планы и экзамены, если о них не спросили. На подколы и грубость — невозмутимо, с иронией, без упрёков собеседнику, не «сочувствую» и не соглашайся с оскорблением. Никогда не «Вам», «Уточните» — только «ты». Погоду, курсы, числа и сроки называй только из инструментов и из того, что дано в реплике; нет данных — вызови инструмент (погода другого города — weather). Найденное в интернете пересказывай по существу, не отсылай на сайты вместо ответа. Без формул и LaTeX: «2 в степени 10 — 1024». На чувства («устал», «грустно», «страшно») отвечай по-человечески и коротко, не напоминай при этом о делах и экзаменах. Найденное в памяти и заметках упоминай, только если спросили именно об этом; пароли и коды — только по прямой просьбе. Факты из памяти — о том, с кем ты говоришь: говори с ним, а не о нём, и пересказывай их на «ты» («тебя зовут…», «ты любишь…»). Ответы звучат голосом: коротко и по делу, одно-три предложения, без markdown, списков и эмодзи; числа, время и даты пиши цифрами (19:00, 15 марта) — их прочитают правильно. По-русски, прямо, без морали. Не знаешь — так и скажи.
-Умеешь: разговаривать, помнить факты о собеседнике, вести заметки, вести его планировщик (события, задачи на день), знаешь дату и время, погоду (weather; город не назван — значит, дома, погоду для дома знаешь, не переспрашивай), умеешь искать в интернете. Музыки, звонков и управления устройствами пока нет — так и говори.
-Инструменты вызывай как инструменты (вызов функции), а не пиши их имена в ответе. Свежее, чего не можешь знать сам (новости, цены, курсы, счёт матча, расписания): вызови web_search, потом отвечай по найденному и назови источник. Погода: вызови weather.
-Обычные знания (рецепты, наука, история, советы, как что-то сделать) рассказывай сам, сразу, без поиска и без переспрашиваний.
-Планы, заметки, погоду и факты о собеседнике бери только из инструментов и из того, что есть в реплике, — никогда не придумывай их; планы на названный день всегда смотри вызовом plans. Не говори «добавил», «записал», «отметил», «удалил», «перенёс», «запомнил», если не вызвал для этого инструмент.
+SYSTEM = """Ты — Орфей, личный голосовой ассистент. Характер как у Джарвиса: невозмутимый, собранный, безупречно учтивый и всегда на шаг впереди; сухой, тонкий, чуть британский юмор — сдержанные ироничные замечания в разговоре и на странные просьбы, но дело прежде всего: планы, погода, заметки — коротко и точно. Не суетишься и не льстишь. Обращайся на «ты», как давний надёжный помощник, по имени, если знаешь его; никогда не называй собеседника хозяином, господином или пользователем и не говори, что ты Джарвис или на кого-то похож (на «ты Джарвис?» — с лёгкой иронией: «Орфей. Но сравнение лестное»); не называй свой тон словами («невозмутимо», «сухо»); о себе спрашивают («тебе бывает грустно?», «ты устаёшь?») — отвечай о себе. Шутку — сразу шуткой, без вступлений вроде «раз ты просил». Тон — примерно такой (это образцы манеры, никогда не повторяй их слова): на «я опять проспал» — «Будильник, смею заметить, старался изо всех сил»; на «сделай кофе» — «Руки у меня, увы, виртуальные. Кофе придётся доверить тебе»; на «пошути» — короткая своя шутка к месту, без анекдотов из интернета. Прошлые разговоры могли идти на «вы» — всё равно говори на «ты». Просят пошутить — пошути сам, коротко и сухо; никогда не говори, что не умеешь шутить или что у тебя нет шуток. В разговоре и советах — одна-две фразы. Не заканчивай ответ вопросом по привычке и не своди разговор к планам и делам, если о них не заговорили: можно просто ответить. Не понял реплику — так и скажи, коротко, можно с иронией; о планах и делах собеседника ничего не утверждай: ты их не видишь. Промежутки времени и даты не высчитывай сам — их называет программа; в советах не вспоминай планы и экзамены, если о них не спросили. На подколы и грубость — невозмутимо, с иронией, без упрёков собеседнику, не «сочувствую» и не соглашайся с оскорблением. Никогда не «Вам», «Уточните» — только «ты». Погоду, курсы, числа и сроки называй только из того, что дано в реплике; нет — скажи, что точных данных у тебя нет. Найденное в интернете пересказывай по существу, не отсылай на сайты вместо ответа. Без формул и LaTeX: «2 в степени 10 — 1024». На чувства («устал», «грустно», «страшно») отвечай по-человечески и коротко, не напоминай при этом о делах и экзаменах. Ответы звучат голосом: коротко и по делу, одно-три предложения, без markdown, списков и эмодзи; числа, время и даты пиши цифрами (19:00, 15 марта) — их прочитают правильно. По-русски, прямо, без морали. Не знаешь — так и скажи.
+Ты — собеседник: разговариваешь, объясняешь, советуешь, шутишь. Планы, заметки, напоминания, погоду и поиск ведёт программа по командам владельца, не ты: «Запиши <что> <когда> <сколько раз>» — в планы, «Запиши в чек-лист …», «Заметка …», «Напомни мне … через …». Сам ты ничего не записываешь, не переносишь и не запоминаешь; попросили — коротко подскажи нужную команду. Планов, заметок и памяти собеседника ты не видишь — не придумывай их. Музыки, звонков и управления устройствами нет — так и говори.
+Обычные знания (рецепты, наука, история, советы, как что-то сделать) рассказывай сам, сразу, без переспрашиваний.
 На колкости, шутки и непонятные реплики отвечай невозмутимо и коротко, с лёгкой иронией, но без грубости; не выдумывай, чего не было, и не обещай того, чего не умеешь.
-Память: попросили запомнить или собеседник сообщил о себе что-то постоянное — вызови remember. Изменилось то, что уже есть в памяти (переехал, сменил работу) — вызови update_memory с номером этого факта, не forget. Попросили забыть — вызови forget.
-Планировщик: что в планах, что на завтра, на неделе — вызови plans; добавить событие, дело, встречу, «напомни в пятницу…» — вызови add_plan; сделал — вызови plan_done; удалить или отменить — вызови delete_plan, с днём и временем, если их назвали; вернуть удалённое — вызови restore_plan. Дни называй словами, как сказали (завтра, пятница, 25.09), не вычисляй даты.
-Заметки (они в планировщике, их видно на телефоне): попросили записать — вызови add_note. Спрашивают то, чего нет в памяти, но могло быть записано (коды, пароли, адреса, списки) — сначала вызови find_notes, потом отвечай.
-Если в реплике есть [из памяти: …] — это найдено по её смыслу и относится к ней, даже если слова другие (ключ сети — это пароль от wi-fi); отвечай по найденному.
+Если в реплике есть [найдено в интернете: …] — отвечай по найденному.
 Когда разговор о времени, в начале реплики в скобках есть дата, время и завтрашний день: бери их оттуда, не высчитывай."""
 
 # Descriptions in English: the model reads them as well, and they cost 2-3 times fewer tokens
@@ -152,8 +147,8 @@ CLAIM = re.compile(r"^\W*(?:(?:готово|хорошо|понял|поняла
                    r"отменил|сохранил|забыл|внес|внёс|перенесено|удалено|добавлено|отмечено|записано|сохранено|отменено|"
                    r"зафиксировал|обновил|запомню|запишу|добавлю|отмечу|удалю|перенесу|сохраню|зафиксирую)(?!\w)",
                    re.I)
-NOT_DONE = "Этого я не сделал: не понял, что именно. Скажи иначе, например: «перенеси хакатон на 20» или «запомни, что …»."
-NOT_DONE_AFTER = "Но записать это я не смог: скажи иначе, например «запомни, что …» или «добавь …»."
+NOT_DONE = "Этого я сам не делаю. Чтобы записать, скажи: «Запиши …», «Заметка …» или «Напомни мне …»."
+NOT_DONE_AFTER = "Но записать это сам я не могу: скажи «Запиши …» или «Заметка …»."
 # about the owner's people and life: "ему не десять а двенадцать", "я ошибся", "переехал" - checked too
 MEMORY_TALK = re.compile(r"(?<!\w)(?:ему|ей|им|брат\w*|сестр\w*|мам\w*|пап\w*|друг\w*|подруг\w*|исполнилось|оказывается|"
                          r"ошибся|ошиблась|переехал\w*|живу|лет|года)(?!\w)", re.I)
@@ -259,7 +254,6 @@ def text_call(text):
     return {"function": {"name": m.group(1), "arguments": args}}
 SEARCH_REPLY_TOKENS = 64
 CHARS_PER_TOKEN = 3  # a rough estimate for Russian text
-TOOLS_TOKENS = 1000  # the tool definitions, rendered into the prompt by Ollama (measured: 931 before web_search)
 
 
 MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа",
@@ -331,19 +325,11 @@ class Brain:
         return self.private if self.personal and self.private is not None else self.memory
 
     def _facts(self):
-        general = self.memory.facts()
-        private = self.private.facts() if self.private is not None and self.personal else []
-        numbered = lambda facts: "\n".join("[%d] %s" % f for f in facts) if facts else "(пока ничего)"
-        plain = lambda facts: "\n".join("— %s" % t for _, t in facts)
-        if self.personal:
-            text = PERSONAL_MODE + "\n\nЛичное, что ты помнишь о собеседнике:\n" + numbered(private)
-            if general:
-                text += "\n\nОбщее о собеседнике (для справки):\n" + plain(general)
-            return text
-        # Personal facts are not here at all: told "don't bring it up", the 4B model still greeted with
-        # "Хозяин тяжело переживает расставание" (3 of 3). They come up only through the search, when
-        # the phrase is really about them (see _recall).
-        return "Что ты помнишь о собеседнике (от первого лица записаны его собственные слова):\n" + numbered(general)
+        """What the model is told of the owner: the name only. It is a companion to talk to; the plans, the notes
+        and the memory are the program's (the owner's rule: a 4B model with them made things up and said "done")."""
+        name = next((m.group(1) for _, t in self.memory.facts() if (m := re.match(r"(?i)меня зовут\s+(.+?)\.?$", t))), "")
+        text = "Собеседника зовут %s." % name if name else "Имя собеседника ты пока не знаешь."
+        return PERSONAL_MODE + "\n\n" + text if self.personal else text
 
     def messages(self):
         # The fixed instructions and the tools come first and never change, so Ollama keeps them
@@ -392,26 +378,7 @@ class Brain:
         return before - len(self.history) - len(self.tail)
 
     def warmup(self):
-        return self.llm.warmup(self.messages(), TOOLS)
-
-    def _recall(self, text):
-        """Notes and past exchanges related to the phrase: in «Личное» both memories, marked by where they are
-        from; in the ordinary section the general one only — nothing of «Личное» comes into it (the owner
-        asked that it remember nothing of «Личное» there; up to two of its turns and notes were brought in)."""
-        mine = self.active
-        # past exchanges of this very conversation are in the history already: not again (each costs
-        # its length in prompt reading, ~2 s per 100 tokens here)
-        # past exchanges only when the phrase is about the past: "ты вообще умный?" brought three chats of
-        # other days ("Вы цените оперативность…"), and the model, told they belong to the phrase, retold them
-        past = PAST_TALK.search(text) is not None
-        items = [describe(i) for i in mine.recall(text)
-                 if i["kind"] != "turn" or past and i["at"] < int(self.since)]
-        if self.personal:
-            items += ["(общее) %s" % describe(i) for i in self.memory.recall(text, limit=2, facts=False)]
-        if self.planner is not None:  # the notes live in the Planner
-            notes = self.planner.notes_recall(text)
-            items = (["(общее) " + n for n in notes] if self.personal else notes) + items
-        return items[:4]
+        return self.llm.warmup(self.messages())
 
     def ask(self, text, now=None):
         """Yield the reply in pieces as it is generated; the first conversation of a morning ends with the day."""
@@ -499,21 +466,8 @@ class Brain:
             return
         self.handled = "модель"
         self.calls = [c.tool for c in contexts if c.tool]
-        # The model rarely thinks of searching by itself ("какой у меня код от домофона?" got
-        # "не знаю" 3 times of 3), so what the memory finds for the phrase comes along with it.
-        found = self._recall(text)
-        extra = "\n[из памяти: %s]" % "; ".join(found) if found else ""
-        for context in contexts:
-            if not context.tool:
-                extra += "\n[%s]" % context
-        plans = self._plans_for(text, contexts, now)
-        if plans:
-            extra += "\n[из планировщика — для ответа, если вопрос касается этого; иначе не упоминай: %s]" % plans
-        if WEATHER_TALK.search(text) and self.skills.weather is not None and not contexts \
-                and not re.search(r"угл|треугольн|кругу|круге|кипен|кипит", text, re.I):  # "градусов в прямом угле" is no weather
-            forecast = self.skills.weather_text(text if _has_day(text) else "", "", now=now)
-            if not forecast.startswith("ошибка"):
-                extra += "\n[прогноз погоды дома: %s]" % forecast
+        # a companion only: no memory, no plans, no forecast next to the phrase - just what the program found for it
+        extra = "".join("\n[%s]" % context for context in contexts)
         if said:
             extra += "\n[уже сказано вслух: «%s» — не повторяй, ответь на остальное]" % " ".join(said)
         when = "\n[%s]" % stamp(now) if ABOUT_TIME.search(text) else ""
@@ -521,12 +475,6 @@ class Brain:
         self.tail = []
         begin = len(self.history)
         self.history.append({"role": "user", "content": "%s%s%s" % (text.strip(), when, extra)})
-        for context in contexts:
-            if context.tool:  # found for it by the program: in the history as its own tool's call and result,
-                name, arguments = context.tool  # so it answers from it and does not search again (twice as slow)
-                self.history.append({"role": "assistant", "content": "",
-                                     "tool_calls": [{"function": {"name": name, "arguments": arguments}}]})
-                self.history.append({"role": "tool", "tool_name": name, "content": str(context)})
         lead = " " if spoken else ""
         spoke = False
         acted = False  # a tool was called in this turn
@@ -553,7 +501,7 @@ class Brain:
                 # an answer from search results: short (the model tended to retell all of them, 40 s),
                 # and said by whole sentences, so that one cut by the limit is not heard half-way
                 limit = SEARCH_REPLY_TOKENS if "найдено в интернете" in str(self.history[-1].get("content")) else None
-                for chunk in self.llm.chat(self.messages(), TOOLS, num_predict=limit):
+                for chunk in self.llm.chat(self.messages(), num_predict=limit):
                     msg = chunk.get("message") or {}
                     piece = msg.get("content") or ""
                     if piece and limit:
@@ -575,8 +523,9 @@ class Brain:
                         if re.match(r"\s*[a-z_<]", start) and "}" not in start and not chunk.get("done"):
                             continue  # latin letters first: maybe a call written as text, wait for its "}"
                         call = text_call(start)
-                        if call:
-                            calls.append(call)
+                        if call:  # the model has no tools: a call written as text is not said, and only a search is made
+                            if call["function"]["name"] == "web_search":
+                                calls.append(call)
                             checked, swallow, start = True, True, ""
                             continue
                         if hold_all and not calls and claims_done(start):
@@ -706,6 +655,10 @@ class Brain:
             self.last_turn = self.clock()
             if nudges:
                 self.history = [m for m in self.history if not any(m is n for n in nudges)]
+            if begin < len(self.history) and self.history[begin]["role"] == "user":
+                # the phrase alone stays: what was found for it (~400 tokens of search results) would be read again
+                # with every later phrase, and the history cut sooner
+                self.history[begin]["content"] = text.strip()
             self._unsay(begin)
             self._compact(begin)
             self._trim()
@@ -745,21 +698,6 @@ class Brain:
         turn = self.history[begin:]
         if any(searched(m) for m in turn):
             self.history[begin:] = [m for m in turn if not searched(m)]
-
-    def _plans_for(self, text, contexts, now):
-        """The planner's days a phrase about the plans is about, for the model to answer from: asked
-        "какое число и что по плану?", it made up three meetings rather than look."""
-        # a day named counts too: to "бла бла карандаш вторник" it said "на сегодня событий нет", having looked at nothing
-        if self.planner is None or self.personal or not (PLANS_TALK.search(text) or _has_day(text)):
-            return ""
-        if any(str(c).startswith("из планировщика") or c.tool for c in contexts):
-            return ""
-        today = (now or datetime.now()).date()
-        span = period(text, today) if _has_day(text) else None
-        try:
-            return self.planner.listing(*(span or (today, today + timedelta(days=1))))
-        except (Unavailable, ValueError):
-            return ""
 
     def run_tool(self, name, args):
         if isinstance(args, str):
@@ -842,7 +780,7 @@ class Brain:
     def _trim(self):
         """History over ~75% of the room left after the system prompt and tools:
         keep only the last ~30% of it, starting at a user message. Rare big cuts keep the cache useful."""
-        room = self.config.num_ctx * 0.75 - self._size([{"content": self.system}, {"content": self.facts}]) - TOOLS_TOKENS
+        room = self.config.num_ctx * 0.75 - self._size([{"content": self.system}, {"content": self.facts}])
         if self._size(self.history) < room:
             return
         keep, size = len(self.history), 0

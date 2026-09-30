@@ -338,13 +338,12 @@ def test_the_model_has_the_weather_as_a_tool():
                                  "content": "Завтра в городе Казань от +10 до +17, небольшой дождь, вероятность осадков 80%."}
 
 
-def test_what_the_program_found_is_the_models_own_search():
+def test_what_the_program_found_comes_with_the_phrase_and_goes_after_it():
     brain = make(replies=[text("По данным cbr.ru, 81,23 рубля.")])
     say(brain, "Найди в интернете курс биткоина")
-    sent = brain.llm.requests[0]
-    assert sent[-3]["content"] == "Найди в интернете курс биткоина"
-    assert sent[-2]["tool_calls"] == [{"function": {"name": "web_search", "arguments": {"query": "курс биткоина"}}}]
-    assert sent[-1]["role"] == "tool" and sent[-1]["content"].startswith("найдено в интернете по запросу «курс биткоина»")
+    sent = brain.llm.requests[0][-1]["content"]
+    assert sent.startswith("Найди в интернете курс биткоина\n[найдено в интернете по запросу «курс биткоина»")
+    assert brain.history[-2] == {"role": "user", "content": "Найди в интернете курс биткоина"}  # the results not read again
 
 
 def test_an_answer_cut_by_the_limit_is_not_heard_half_way():
@@ -388,10 +387,10 @@ def test_a_date_is_not_the_end_of_a_sentence_cut_by_the_limit():
     assert say(brain, "Найди в интернете курс биткоина") == "Сейчас поищу. Курс есть на cbr.ru."
 
 
-def test_the_model_asked_about_the_weather_gets_the_forecast_with_the_phrase():
-    brain = make(replies=[text("Да, будет тепло.")])
+def test_the_model_gets_no_forecast_with_the_phrase():
+    brain = make(replies=[text("Смотря куда.")])
     say(brain, "Стоит ли в субботу ехать за город, будет тепло?")
-    assert "[прогноз погоды дома: Завтра в Москве от" in brain.llm.requests[0][-1]["content"]  # Saturday is tomorrow
+    assert "прогноз погоды" not in brain.llm.requests[0][-1]["content"]
 
 
 def test_what_the_weather_knows_more_and_follow_ups_by_parts_of_the_day():

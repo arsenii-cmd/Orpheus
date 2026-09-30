@@ -48,7 +48,9 @@ class FakePlanner:
             series, first = "s%d" % self.clock, date.fromisoformat(item["date"])
             made = []
             for k in range(repeat["count"]):
-                if repeat["unit"] == "week":
+                if repeat["unit"] == "day":
+                    day = first + timedelta(days=k)
+                elif repeat["unit"] == "week":
                     day = first + timedelta(weeks=k)
                 else:  # the 31st in a shorter month is its last day, as plannerd does
                     y, m = first.year + (first.month - 1 + k) // 12, (first.month - 1 + k) % 12 + 1
@@ -148,9 +150,9 @@ def say(brain, phrase):
 
 def test_the_program_adds_without_the_model():
     brain = brain_with()
-    assert say(brain, "Добавь на завтра в 12 созвон") == "Добавил на завтра, субботу, 26 сентября: в 12:00 Созвон."
+    assert say(brain, "Запиши на завтра в 12 созвон один раз") == "Записал на завтра, субботу, 26 сентября: в 12:00 Созвон."
     assert brain.llm.requests == []
-    assert brain.tail[-1] == {"role": "assistant", "content": "Добавил на завтра, субботу, 26 сентября: в 12:00 Созвон."}
+    assert brain.tail[-1] == {"role": "assistant", "content": "Записал на завтра, субботу, 26 сентября: в 12:00 Созвон."}
 
 
 def test_a_list_of_the_day_needs_no_model_and_a_question_gets_the_facts():

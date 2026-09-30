@@ -14,6 +14,7 @@ from datetime import date, datetime, timedelta
 import numpy as np
 
 from . import calc
+from .commands import Commands
 from .intents import Intents
 from .memory import RECALL_MARGIN
 from .numbers import plural, to_digits
@@ -483,23 +484,6 @@ DUTY = re.compile(r"(?:купить|сделать|позвонить|напис
                   r"починить|постирать|погладить|вынести|отдать|вернуть|полить|покормить|выгулять|проверить|поздравить)(?!\w)", re.I)
 
 
-def TOLD_PLAN(text):
-    """A day and a time and what, said as a statement: "в понедельник в 16:40 занятие по физике"; "у меня в
-    субботу турнир" with no time too (a task of that day)."""
-    if re.search(r"отложил\w*|перенесл\w*|сдвинул\w*|отменил\w*|продлил\w*|свобод|(?<!\w)занят[аы]?(?!\w)|перешел|перешла|перешёл|или\s+(?:дня|ночи|утра|вечера)|(?<!\w)класс", text, re.I):
-        return False  # "я свободен завтра в 15", "я перешёл в 12", "в три дня или ночи": no plan told (each became one)
-    repeats = repeat_days(text) is not None or REPEAT_WEEK.search(text) is not None  # "по будням в 8 утра английский"
-    return ((_has_day(text) or repeats and _has_time(text)) and (_has_time(text) or re.match(r"^\W*(?:(?:ну|а|кстати|слушай|короче)\W+)*у\s+(?:меня|нас)\s", text, re.I)
-                                and not re.search(r"рожден|днюх|выходн|праздник|каникул|отпуск|свобод|занят|дел(?:а|о)?\b|план", text, re.I))
-            and not QUESTION.search(text)
-            and not when_only(text)  # "завтра в 12." - no what
-            and not re.search(r"(?<!\w)(?:был|была|было|были|вчера|позавчера|прошл\w*|не\s+надо|не\s+нужно)(?!\w)", text, re.I)
-            # "я завтра в 10 не смогу прийти", "он сказал, что перенесёт встречу на завтра": said to someone, or
-            # about someone else - not a plan to add («Я в не смогу прийти» was added)
-            and not re.search(r"(?<!\w)не\s+(?!забудь|забыть)\w+|(?<!\w)(?:сказал\w*|говорит|говорил\w*|пишет|написал\w*|"
-                              r"обещал\w*|думаю|думает|кажется)(?!\w)", text, re.I))
-
-
 def _minutes(hhmm):
     h, m = map(int, hhmm.split(":"))
     return h * 60 + m
@@ -586,6 +570,7 @@ class Skills:
         self.last = None  # (scenario, phrase) answered last, when "а завтра?" may go on from it
         self.side_turn = -1  # the last turn a scenario other than the plans' answered
         self.last_day = None  # the day "какое число будет в пятницу?" was about
+        self.commands = Commands(self)  # "Запиши …", "Заметка …": the owner's fixed commands
 
     # ---------------------------------------------------------------------------------- the entry
 
@@ -617,6 +602,10 @@ class Skills:
         self.handled = None
         if self.planner:
             self.planner.new_turn(text)
+        command = self.commands.handle(text, now)
+        if command is not None:
+            self.handled = self.handled or "record"
+            return command
         pending, self.pending = self.pending, None
         last, self.last = self.last, None
         if pending and (pending[0] == self.turn - 1 or pending[0] == self.turn - 2 and self.pending_kept == self.turn - 1):
@@ -635,7 +624,8 @@ class Skills:
                 return pending[1]()
         awaiting, self.awaiting = self.awaiting, None
         if awaiting and awaiting[0] == self.turn - 1 and when_only(text):
-            return self._dispatch("добавь %s %s" % (text.strip(" .!"), awaiting[1]), now)  # "На когда?" - "Завтра в 12."
+            self.handled = "record"
+            return self.add_plan("%s %s" % (text.strip(" .!"), awaiting[1]), now)  # "На когда?" - "Завтра в 12."
         wanted_day, self.wanted_day = self.wanted_day, None
         if wanted_day and wanted_day[0] == self.turn - 1 and not DISMISS.search(text) and not NO.search(text):
             if when_only(text):
@@ -672,12 +662,7 @@ class Skills:
         both = self._split(text, now)
         if both is not None:
             return both
-        result = self._dispatch(self._carry_last(last, text), now)
-        if result is None and TOLD_PLAN(text):
-            # "В понедельник в 16:40 занятие по физике." - a plan told, not asked about: the model answered
-            # "У вас запланировано…" and nothing was added. Added; "верни" undoes it
-            result = self._dispatch("добавь " + text.strip(), now)
-        return result
+        return self._dispatch(self._carry_last(last, text), now)
 
     def _dispatch(self, text, now):
         """The first scenario whose template [text] matches and that takes it."""
@@ -1876,13 +1861,6 @@ class Skills:
         if m.template.startswith("запиши") and not (_has_day(what) or _has_time(what)):
             return None
         what = re.sub(r"^(?:что|чтобы)\s+", "", what, flags=re.I)
-        same = re.search(r"(?<!\w)(?:тоже|то\s+же(?:\s+самое)?|так(?:ую|ое|ой|ая)\s+же)(?!\w)", what, re.I)
-        if same:
-            # "и на послезавтра в 15 тоже" made a plan «Тоже»: the one added last, again
-            last = self.planner.last_added
-            if last is None:
-                return "Что добавить?"
-            what = what.replace(same.group(0), last["title"])
         before = re.fullmatch(r"\s*за\s+((?:\S+\s+)?(?:час\w*|минут\w*|полчаса))\s*", what, re.I)
         if before and len(self.planner.focus) != 1:
             self.wanted = (self.turn, "за %s до" % before.group(1))
@@ -1896,22 +1874,9 @@ class Skills:
             # "напомни", "добавь задачу", "напомни через 20 минут", "поставь напоминание на завтра в 8": what is asked for
             self.wanted = (self.turn, bare)
             return "Что напомнить?" if re.search(r"напомн|напомин", self.heard, re.I) else "Что добавить?"
-        if re.match(r"\W*(?:поставь|переставь)", self.heard, re.I) and (_has_day(what) or _has_time(what)):
-            # "поставь хакатон на завтра на 19" with a hackathon in the plans: that one, moved (it made a second one)
-            item, _ = self.planner._find(what, strict=True)
-            if item is not None and all(st in normalize_low(what) for st in _stems(item["title"])):
-                answer = self.planner.move_item(item, what)
-                self._undo_move(item, answer)
-                self.handled = "plan_move"
-                return _say(answer)
-        pronoun = re.match(r"^(?:его|её|ее|их)\s+(.+)$", what.strip(), re.I)
-        if pronoun and self.planner.focus and len(self.planner.focus) == 1 and when_only(pronoun.group(1)):
-            # "поставь его на 9 утра": the one just talked of, moved (it made an event «Его»)
-            before = self.planner.focus[0]
-            answer = self.planner.move_item(before, pronoun.group(1))
-            self._undo_move(before, answer)
-            self.handled = "plan_move"
-            return _say(answer)
+        placed = self._place(what)
+        if placed is not None:
+            return placed
         if m.template.startswith(("[мне] (надо|", "не (забудь|")) and re.search(
                 r"(?<!\w)(?:было|вчера|позавчера|прошл\w*)(?!\w)", self.heard, re.I):
             return None  # "мне надо было вчера в 5 позвонить": regret, not a plan
@@ -1924,6 +1889,17 @@ class Skills:
             # "добавь сахар в чай", "поставь чайник", "добавь громкости" (each became a task for today): the
             # model's, which can still add a plan by its own tool if it is one
             return None
+        return self.add_plan(what, now, reminder=m.template.startswith("напомни"))
+
+    def add_plan(self, what, now, reminder=False):
+        """[what]: the plan said, its day and time in it -> what to say. "Запиши …" (commands.py) and "напомни …"."""
+        same = re.search(r"(?<!\w)(?:тоже|то\s+же(?:\s+самое)?|так(?:ую|ое|ой|ая)\s+же)(?!\w)", what, re.I)
+        if same:
+            # "и на послезавтра в 15 тоже" made a plan «Тоже»: the one added last, again
+            last = self.planner.last_added
+            if last is None:
+                return "Что добавить?"
+            what = what.replace(same.group(0), last["title"])
         # "добавь задачу купить молоко", "внеси в план ...": not part of the title
         what = " ".join(ADD_WORDS.sub(" ", what).split())
         # "добавь, короче, на послезавтра созвон" («Эээ добавь короче созвон»)
@@ -1943,7 +1919,7 @@ class Skills:
         if len(pieces) > 1 and all(re.search(r"(?:^|\s)(?:в|к)\s+\d", p) for p in pieces) and not REPEAT_WEEK.search(what):
             return self._add_several(pieces)
         if not (_has_day(what) or _has_time(what)) and EVENT_NOUN.search(what) and not PLAN_MARKED.search(self.heard) \
-                and not m.template.startswith("напомни"):
+                and not reminder:
             # "добавь встречу": an event with no day or time - asked for, and the answer completes it (a task
             # «Встреча» for today, and then «Завтра в 12» said "пустое название")
             self.awaiting = (self.turn, what)
@@ -1981,6 +1957,38 @@ class Skills:
             else:
                 self._can_undo(lambda: (planner.planner.delete(added["id"]), "Убрал из планов: %s." % planner.describe(added))[1])
         return answer
+
+    def _place(self, what):
+        """"поставь хакатон на завтра на 19", "поставь его на 9 утра": a plan already there, moved -> what to say, or None."""
+        if re.match(r"\W*(?:поставь|переставь)", self.heard, re.I) and (_has_day(what) or _has_time(what)):
+            # "поставь хакатон на завтра на 19" with a hackathon in the plans: that one, moved (it made a second one)
+            item, _ = self.planner._find(what, strict=True)
+            if item is not None and all(st in normalize_low(what) for st in _stems(item["title"])):
+                answer = self.planner.move_item(item, what)
+                self._undo_move(item, answer)
+                self.handled = "plan_move"
+                return _say(answer)
+        pronoun = re.match(r"^(?:его|её|ее|их)\s+(.+)$", what.strip(), re.I)
+        if pronoun and self.planner.focus and len(self.planner.focus) == 1 and when_only(pronoun.group(1)):
+            # "поставь его на 9 утра": the one just talked of, moved (it made an event «Его»)
+            before = self.planner.focus[0]
+            answer = self.planner.move_item(before, pronoun.group(1))
+            self._undo_move(before, answer)
+            self.handled = "plan_move"
+            return _say(answer)
+        return None
+
+    def do_plan_hint(self, m, now):
+        """"Добавь тренировку в среду": plans are written by "Запиши …" only (the owner's rule); not a plan
+        ("поставь чайник", "добавь сахар") is the model's."""
+        what = m.slots.get("what", "")
+        if self.planner is not None:
+            placed = self._place(what)
+            if placed is not None:
+                return placed
+        if self.planner is None or not (_has_day(what) or _has_time(what) or PLAN_LIKE.search(what) or EVENT_NOUN.search(what)):
+            return None
+        return "Чтобы записать в планы, скажи: «Запиши», потом что, когда и сколько раз. Например: «Запиши тренировку в среду в 6 утра, 10 недель»."
 
     def _add_on_days(self, what, days):
         """"Тренировку в понедельник, среду и пятницу в 6 утра": one item on each of the coming days."""

@@ -71,11 +71,12 @@ def test_system_prompt_stays_identical_between_turns_for_the_cache():
     assert last[:len(first)] == first  # the whole previous prompt is a prefix of the next one
 
 
-def test_fresh_conversation_picks_up_new_facts():
-    brain = make(tool("remember", fact="Кот по имени Барсик"), text("Ок."))
-    list(brain.ask("запомни", now=NOW))
+def test_the_model_knows_only_the_name():
+    brain = make(text("Ок."))
+    brain.memory.remember("Меня зовут Сеня")
+    brain.memory.remember("Кот по имени Барсик")
     brain.reset()
-    assert "[1] Кот по имени Барсик" in brain.messages()[1]["content"]
+    assert brain.messages()[1]["content"] == "Собеседника зовут Сеня."  # a companion: no facts, no plans, no notes
     assert brain.messages()[0]["content"] == SYSTEM  # the cached start stays the same
     assert brain.history == []
 
@@ -138,16 +139,12 @@ def test_stamp_works_out_tomorrow_across_months_and_years():
     assert stamp(datetime(2026, 12, 31, 12, 0)).endswith("завтра пятница, 1 января")
 
 
-def test_notes_matching_the_phrase_come_along_with_it():
-    brain = make(text("4521."))
+def test_nothing_of_the_memory_comes_along_with_the_phrase():
+    brain = make(text("Не знаю."))
     brain.memory.add_note("Код от домофона 4521", "домофон")
     list(brain.ask("Какой у меня код от домофона?", now=NOW))
-    user = brain.llm.requests[0][-1]["content"]
-    assert user.endswith("\n[из памяти: заметка [1]: домофон: Код от домофона 4521]")
-    brain2 = make(text("Привет."))
-    brain2.memory.add_note("Код от домофона 4521")
-    list(brain2.ask("Привет, расскажи анекдот", now=NOW))
-    assert "из памяти" not in brain2.llm.requests[0][-1]["content"]
+    assert brain.llm.requests[0][-1]["content"] == "Какой у меня код от домофона?"
+    assert "tools" not in str(brain.llm.requests)
 
 
 def test_an_action_claimed_with_no_tool_called_is_not_said():
@@ -161,20 +158,20 @@ def test_an_action_claimed_with_no_tool_called_is_not_said():
 
 def test_a_passive_claim_is_caught_too():
     brain = make(text("Перенесено на пятнадцать."), text("Перенесено."))
-    assert "".join(brain.ask("нет лучше на пятнадцать", now=NOW)).startswith("Этого я не сделал")
+    assert "".join(brain.ask("нет лучше на пятнадцать", now=NOW)).startswith("Этого я сам не делаю")
 
 
-def test_a_call_written_as_text_is_made_not_said():
-    """Gemma 4 wrote 'web_search{query:<|"|>книги на вечер<|"|>} Поищу вам…' as its answer."""
+def test_a_call_written_as_text_is_not_said_nor_made():
+    """Gemma 4 wrote 'web_search{query:<|"|>книги на вечер<|"|>} Поищу вам…' as its answer; the model has no tools now."""
     from orpheus.brain import text_call
     assert text_call('web_search{query:<|"|>книги на вечер<|"|>}') == \
         {"function": {"name": "web_search", "arguments": {"query": "книги на вечер"}}}
     assert text_call('call:forget{id:3}')["function"]["arguments"] == {"id": 3}
     assert text_call("hello{x:1}") is None
     brain = make([{"message": {"content": p}} for p in ["remember{fact:", '<|"|>Любит чай<|"|>}', " Запомнил!"]] +
-                 [{"done": True}])
-    assert "".join(brain.ask("кстати, чай я люблю зелёный", now=NOW)) == "Запомнил."
-    assert brain.memory.facts() == [(1, "Любит чай")]
+                 [{"done": True}], text("Зелёный — хороший выбор."))
+    assert "remember" not in "".join(brain.ask("кстати, чай я люблю зелёный", now=NOW))
+    assert brain.memory.facts() == []
 
 
 def test_a_tool_named_then_its_argument_is_a_call_too():
@@ -184,7 +181,7 @@ def test_a_tool_named_then_its_argument_is_a_call_too():
     assert text_call("add_note купить батарейки") is None  # a space alone is too loose
     assert text_call("forget\n3") is None  # not a text argument
     brain = make(text("Я запомнил, что вы живёте в Казани."), text("Я запомнил."))
-    assert "".join(brain.ask("есть у меня кот барсик", now=NOW)).startswith("Этого я не сделал")
+    assert "".join(brain.ask("есть у меня кот барсик", now=NOW)).startswith("Этого я сам не делаю")
 
 
 def test_gemma_gets_the_prompt_without_tool_lines_and_a_stamp_written_back_is_not_said():
@@ -218,7 +215,7 @@ def test_asked_to_do_something_a_claim_anywhere_in_the_answer_is_caught():
     assert not claims_done("Я не добавил тренировку: не знаю времени.")
     assert not claims_done("Добавлю, если скажете время.")
     brain = make(text("В четверг пусто, ", "поэтому я добавил тренировку."), text("В четверг пусто, поэтому я добавил её."))
-    assert "".join(brain.ask("посмотри четверг и если пусто добавь тренировку", now=NOW)).startswith("Этого я не сделал")
+    assert "".join(brain.ask("посмотри четверг и если пусто добавь тренировку", now=NOW)).startswith("Этого я сам не делаю")
 
 
 def test_words_after_a_tool_round_are_spaced_from_those_before():
@@ -229,13 +226,12 @@ def test_words_after_a_tool_round_are_spaced_from_those_before():
     assert "".join(brain.ask("что там было", now=NOW)) == "Позвольте поискать. Нашёл."
 
 
-def test_a_day_named_brings_its_plans_along():
-    # "бла бла карандаш вторник": "на сегодня событий нет", with nothing looked at
+def test_a_day_named_brings_no_plans_along():
     from test_planner import tools
     brain = Brain(Config(), Memory(":memory:"), FakeLLM(text("Не совсем понял.")),
                   planner=tools({"id": "f", "kind": "event", "title": "Физика", "date": "2026-09-25", "start_time": "12:00"}))
     list(brain.ask("бла бла карандаш пятница", now=NOW))
-    assert "Физика" in brain.llm.requests[0][-1]["content"]
+    assert "Физика" not in str(brain.llm.requests[0])
 
 
 def test_a_claim_in_the_middle_of_an_answer_is_not_said():
