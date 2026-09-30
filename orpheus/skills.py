@@ -310,8 +310,16 @@ def to_you(fact):
     return said[:1].lower() + said[1:] if not re.match(r"[А-ЯЁ]{2}", said) else said
 
 
+def _wifi(text):
+    """"Wi-Fi" as said: "вайфай" (a note «Wi-Fi» was not found by "вайфай")."""
+    return re.sub(r"wi-?fi|вай[\s-]?фай", "вайфай", text, flags=re.I)
+
+
 def _minutes_said(n):
     """120 -> "2 часа", 60 -> "час", 90 -> "90 минут"."""
+    if n and n % 1440 == 0:
+        d = n // 1440
+        return "день" if d == 1 else "%d %s" % (d, plural(d, "день", "дня", "дней"))
     if n and n % 60 == 0:
         h = n // 60
         return "час" if h == 1 else "%d %s" % (h, plural(h, "час", "часа", "часов"))
@@ -478,7 +486,7 @@ DUTY = re.compile(r"(?:купить|сделать|позвонить|напис
 def TOLD_PLAN(text):
     """A day and a time and what, said as a statement: "в понедельник в 16:40 занятие по физике"; "у меня в
     субботу турнир" with no time too (a task of that day)."""
-    if re.search(r"свобод|(?<!\w)занят[аы]?(?!\w)|перешел|перешла|перешёл|или\s+(?:дня|ночи|утра|вечера)|(?<!\w)класс", text, re.I):
+    if re.search(r"отложил\w*|перенесл\w*|сдвинул\w*|отменил\w*|продлил\w*|свобод|(?<!\w)занят[аы]?(?!\w)|перешел|перешла|перешёл|или\s+(?:дня|ночи|утра|вечера)|(?<!\w)класс", text, re.I):
         return False  # "я свободен завтра в 15", "я перешёл в 12", "в три дня или ночи": no plan told (each became one)
     repeats = repeat_days(text) is not None or REPEAT_WEEK.search(text) is not None  # "по будням в 8 утра английский"
     return ((_has_day(text) or repeats and _has_time(text)) and (_has_time(text) or re.match(r"^\W*(?:(?:ну|а|кстати|слушай|короче)\W+)*у\s+(?:меня|нас)\s", text, re.I)
@@ -602,7 +610,7 @@ class Skills:
         # "напомни, какое сегодня число": a question whatever it names; "напомни, что я говорил про Виктора" too,
         # but "напомни, что завтра в 10 врач" is a reminder
         self.rewritten = None
-        before = re.search(r"(?<!\w)за\s+(?:\S+\s+)?(?:час\w*|минут\w*|полчаса)(?!\w)", text, re.I)  # "напомни про ЕГЭ за 2 часа"
+        before = re.search(r"(?<!\w)за\s+(?:\S+\s+)?(?:час\w*|минут\w*|полчаса|день|дня|дней|сутки)(?!\w)", text, re.I)  # "напомни про ЕГЭ за 2 часа"
         if asks and not before and (asks.group(1) or REMIND_PAST.match(text) or not (_has_day(text) or _has_time(text))):
             text = self.rewritten = text[asks.end():]  # the model gets it so too: a question, not about its memory
         self.heard = text
@@ -1150,6 +1158,8 @@ class Skills:
         if not re.search(r"\w", text):
             return None
         said_note = re.search(r"заметк|заметочк|памятк|запис[ьи]\b|записочк", normalize_low(self.heard))
+        if not said_note and re.match(r"\s*меня\s+(?:на|к|в)\s", text, re.I):
+            return None  # "запиши меня на тренировку": a plan, not a note «Меня на тренировку»
         span = planner_time_span(to_digits(text)) is not None  # "запиши на завтра футбол с 16 до 18" became a note
         if not said_note and self.planner is not None and (_has_time(text) or span or _has_day(text) and len(text.split()) <= 6):
             # "запиши меня к врачу на пятницу в 10", "запиши на пятницу стрижку" are for the planner; a long text
@@ -1278,7 +1288,7 @@ class Skills:
             notes = notes[:1]
         for k in range(min(3, len(words) - 1), 0, -1):
             stems = _stems(" ".join(words[:k]))
-            hit = [n for n in notes if stems and all(st in n.display.lower().replace("ё", "е") for st in stems)]
+            hit = [n for n in notes if stems and all(st in _wifi(n.display.lower().replace("ё", "е")) for st in stems)]
             if hit:
                 note = hit[0]
                 text = re.sub(r"^(?:ещ[её]|также|тоже|что|чтобы|:)\s*", "", " ".join(words[k:]), flags=re.I).strip(" .")
@@ -1555,12 +1565,15 @@ class Skills:
             said = next((t for _, t in self.brain.memory.facts() if re.search(r"(?i)день рождения", t)), None)
             if not said:
                 return "Ты мне ещё не говорил, когда у тебя день рождения."
-            return "Ваш %s." % re.sub(r"(?i)^(?:мой|у меня)\s+", "", said).rstrip(".")
+            return "Твой %s." % re.sub(r"(?i)^(?:мой|у меня)\s+", "", said).rstrip(".")  # it was "Ваш"
         span = period(when, now.date())
         if span is None or span[0] != span[1]:
             return None
         d = span[0]
         said = "%d %s" % (d.day, MONTHS[d.month - 1])
+        year = re.search(r"(?<!\d)(19\d\d|20[0-2]\d)(?!\d)", to_digits(self.heard))
+        if year:  # "я родился 14 марта 2009": the year kept too, the age is counted from it
+            said += " %s года" % year.group(1)
         memory = self.brain.memory
         old = next(((i, t) for i, t in memory.facts() if re.search(r"(?i)рожд", t)), None)
         if old:
@@ -1569,6 +1582,20 @@ class Skills:
             memory.remember("Мой день рождения %s" % said)
         self.brain.refresh_facts()
         return "Запомнил: твой день рождения %s." % said
+
+    def do_ask_age(self, m, now):
+        """"Сколько мне лет?": from the birthday with its year, or the age said (the model said 15 for 2009)."""
+        for _, t in self.brain.memory.facts():
+            born = re.search(r"рожд\w*\s+(\d{1,2})\s+(\w+)\s+(\d{4})", to_digits(t), re.I)
+            if born and born.group(2).lower() in MONTHS:
+                b = date(int(born.group(3)), MONTHS.index(born.group(2).lower()) + 1, int(born.group(1)))
+                today = now.date()
+                age = today.year - b.year - ((today.month, today.day) < (b.month, b.day))
+                return "Тебе %d %s." % (age, plural(age, "год", "года", "лет"))
+            said = re.match(r"(?i)мне\s+(?:уже\s+)?(\d{1,3})\s+(?:лет|год)", to_digits(t))
+            if said:
+                return "Тебе %s %s — так ты говорил." % (said.group(1), plural(int(said.group(1)), "год", "года", "лет"))
+        return "Ты не говорил, сколько тебе лет или когда родился."
 
     def do_forget_all(self, m, now):
         memory = self.brain.active
@@ -2367,8 +2394,9 @@ class Skills:
             return None
         before = to_digits(m.slots.get("before", "")).lower()
         n = re.search(r"\d+", before)
-        minutes = 30 if "полчас" in before else (int(n.group(0)) if n else 1) * (60 if "час" in before else 1)
-        if not re.search(r"час|минут", before):
+        minutes = 30 if "полчас" in before else (int(n.group(0)) if n else 1) * (
+            1440 if re.search(r"(?<!\w)(?:день|дня|дней|сутки|суток)", before) else 60 if "час" in before else 1)
+        if not re.search(r"час|минут|(?<!\w)(?:день|дня|дней|сутки|суток)", before):
             return None
         item, problem = self.planner._find(m.slots.get("what", ""), strict=True)
         if item is None:

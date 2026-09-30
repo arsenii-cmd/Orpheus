@@ -1517,3 +1517,15 @@ def test_what_the_eleventh_talk_showed():
     say(brain, "добавь на завтра в 15 встречу с Димой")
     say(brain, "и на послезавтра в 15 тоже")
     assert brain.skills.planner.planner.quick_text == "и послезавтра в 15 Созвон"  # the fake's title of the last one
+
+
+def test_what_the_twelfth_talk_showed():
+    brain = make(*WEEK, {"id": "p", "kind": "event", "title": "Пробник", "date": "2026-09-30", "start_time": "10:00"},
+                 replies=[text("Ясно.")] * 2)
+    assert say(brain, "экзамен отложили на два дня") == "Ясно."  # no plan «Экзамен отложили»
+    assert say(brain, "напомни мне про пробник за день").startswith("Напомню за день до «Пробник»")
+    assert "с 10:00 до 15:00 Хакатон" in say(brain, "хакатон продлили до 15")
+    assert say(brain, "когда у меня следующее дело").startswith("Дальше")
+    say(brain, "я родился 14 марта 2009")
+    assert say(brain, "сколько мне лет") == "Тебе 17 лет."
+    assert say(brain, "когда у меня день рождения") == "Твой день рождения 14 марта 2009 года."
